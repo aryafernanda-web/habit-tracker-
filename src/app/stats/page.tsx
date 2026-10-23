@@ -1,19 +1,15 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { format, subDays, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, startOfWeek, endOfWeek } from 'date-fns'
+import { useState, useMemo } from 'react'
+import { format, subDays, eachDayOfInterval } from 'date-fns'
 import { id as localeId } from 'date-fns/locale'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, AreaChart, Area,
+  AreaChart, Area,
 } from 'recharts'
 import { useHabits } from '@/lib/context'
-import {
-  getAllLogs, getLogsInRange,
-} from '@/lib/db'
-import { todayStr, isHabitScheduledOn, isCompleted, calculateStreak, completionRateInRange } from '@/lib/utils'
+import { isHabitScheduledOn, isCompleted, calculateStreak, completionRateInRange } from '@/lib/utils'
 import type { HabitLog } from '@/lib/types'
-import ProgressRing from '@/components/ProgressRing'
 
 // ── Heatmap cell ──────────────────────────────────────────────────────────────
 
@@ -37,16 +33,11 @@ function HeatCell({ pct, date }: { pct: number; date: string }) {
 // ── Main Stats Page ───────────────────────────────────────────────────────────
 
 export default function StatsPage() {
-  const { habits, categories, settings } = useHabits()
-  const [allLogs, setAllLogs] = useState<HabitLog[]>([])
+  const { habits, categories, logs, isLoading } = useHabits()
+  const allLogs = logs
   const [period,  setPeriod]  = useState<'week'|'month'|'3months'>('week')
-  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    getAllLogs().then(l => { setAllLogs(l); setLoading(false) })
-  }, [])
-
-  const today  = new Date()
+  const today = useMemo(() => new Date(), [])
   const catMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories])
 
   const activeHabits = habits.filter(h => !h.archivedAt)
@@ -59,7 +50,7 @@ export default function StatsPage() {
     else if (period === 'month') { start = subDays(today, 29); days = 30 }
     else                      { start = subDays(today, 89); days = 90 }
     return { startDate: start, endDate: end, barDays: days }
-  }, [period])
+  }, [period, today])
 
   const logMap = useMemo(() => {
     const map = new Map<string, HabitLog>()
@@ -130,9 +121,9 @@ export default function StatsPage() {
       const done  = sched.filter(h => isCompleted(logMap.get(`${h.id}_${ds}`), h))
       return { date: ds, pct: sched.length === 0 ? 0 : Math.round(done.length / sched.length * 100) }
     })
-  }, [activeHabits, logMap])
+  }, [activeHabits, logMap, today])
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="page-container">
         <div className="skeleton h-40 mb-4" />

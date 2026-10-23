@@ -14,10 +14,8 @@ export type FrequencyType = 'daily' | 'weekly' | 'custom'
 
 export interface HabitFrequency {
   type: FrequencyType
-  // For 'weekly': which days of week (0=Sun, 6=Sat)
-  daysOfWeek?: number[]
-  // For 'custom': interval in days
-  intervalDays?: number
+  daysOfWeek?: number[]   // For 'weekly': 0=Sun, 6=Sat
+  intervalDays?: number   // For 'custom': interval in days
 }
 
 export interface Habit {
@@ -25,24 +23,25 @@ export interface Habit {
   name: string
   description?: string
   categoryId: CategoryId
-  color: string          // habit accent color (hex)
+  color: string          // hex
   icon: string           // emoji
   frequency: HabitFrequency
   targetCount: number    // times per occurrence (default 1)
-  reminderTime?: string  // HH:MM
-  createdAt: string      // ISO date string
-  archivedAt?: string    // ISO date string
-  order: number          // sort order
+  reminderTime?: string  // HH:MM — e.g. "07:30"
+  reminderEnabled: boolean
+  createdAt: string      // ISO
+  archivedAt?: string    // ISO
+  order: number
 }
 
 // Record of habit completion for a specific date
 export interface HabitLog {
-  id: string       // `${habitId}_${dateStr}` e.g. "abc_2024-01-15"
+  id: string       // `${habitId}_${dateStr}`
   habitId: string
   date: string     // YYYY-MM-DD
-  count: number    // how many times completed (0 = not done)
+  count: number
   note?: string
-  completedAt?: string  // ISO timestamp of last completion
+  completedAt?: string  // ISO
 }
 
 // Statistics helpers
@@ -63,8 +62,8 @@ export interface HabitStreak {
 export interface HabitStats {
   habit: Habit
   streak: HabitStreak
-  completionRate7d: number   // % last 7 days
-  completionRate30d: number  // % last 30 days
+  completionRate7d: number
+  completionRate30d: number
   totalCompleted: number
   logs: HabitLog[]
 }
@@ -86,4 +85,5 @@ export interface AppSettings {
   weekStartsOnMonday: boolean
   showCompletedHabits: boolean
   defaultView: 'today' | 'week'
+  notificationsEnabled: boolean
 }

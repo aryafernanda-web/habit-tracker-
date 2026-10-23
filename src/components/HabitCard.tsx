@@ -5,28 +5,28 @@ import type { Habit, HabitLog, Category } from '@/lib/types'
 import { isCompleted, completionPercent, colorWithOpacity } from '@/lib/utils'
 import { ConfirmDialog } from './Modal'
 
-// ── Confetti helper ─────────────────────────────────────────────────────────────
+// ── Confetti helper ──────────────────────────────────────────────────────────
 
 function triggerConfetti(x: number, y: number, color: string) {
   if (typeof window === 'undefined') return
-  const colors = [color, '#f59e0b', '#22c55e', '#d946ef']
-  for (let i = 0; i < 8; i++) {
+  const colors = [color, '#f59e0b', '#10b981', '#ec4899', '#6366f1']
+  for (let i = 0; i < 10; i++) {
     const dot = document.createElement('div')
     dot.className = 'confetti-dot'
-    const size = Math.random() * 8 + 4
+    const size = Math.random() * 9 + 5
     dot.style.cssText = `
-      width: ${size}px; height: ${size}px;
-      left: ${x + (Math.random() - 0.5) * 60}px;
-      top: ${y}px;
-      background: ${colors[Math.floor(Math.random() * colors.length)]};
-      animation-delay: ${Math.random() * 0.2}s;
+      width:${size}px; height:${size}px;
+      left:${x + (Math.random() - 0.5) * 70}px;
+      top:${y + (Math.random() - 0.5) * 20}px;
+      background:${colors[Math.floor(Math.random() * colors.length)]};
+      animation-delay:${Math.random() * 0.15}s;
     `
     document.body.appendChild(dot)
     setTimeout(() => dot.remove(), 900)
   }
 }
 
-// ── HabitCard ──────────────────────────────────────────────────────────────────
+// ── HabitCard ─────────────────────────────────────────────────────────────────
 
 interface HabitCardProps {
   habit: Habit
@@ -39,22 +39,21 @@ interface HabitCardProps {
   onDelete?: (habit: Habit) => void
   onArchive?: (habit: Habit) => void
   showActions?: boolean
-  compact?: boolean
 }
 
 export default function HabitCard({
   habit, log, category, date,
   onToggle, onIncrement, onEdit, onDelete, onArchive,
-  showActions = false, compact = false,
+  showActions = false,
 }: HabitCardProps) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const [toggling, setToggling] = useState(false)
+  const [menuOpen,       setMenuOpen]       = useState(false)
+  const [confirmDelete,  setConfirmDelete]  = useState(false)
+  const [toggling,       setToggling]       = useState(false)
 
-  const done     = isCompleted(log, habit)
-  const percent  = completionPercent(log, habit)
-  const bgColor  = colorWithOpacity(habit.color, 0.1)
-  const isMulti  = habit.targetCount > 1
+  const done    = isCompleted(log, habit)
+  const percent = completionPercent(log, habit)
+  const bgColor = colorWithOpacity(habit.color, 0.08)
+  const isMulti = habit.targetCount > 1
 
   const handleCheck = useCallback(async (e: React.MouseEvent) => {
     if (toggling) return
@@ -72,86 +71,107 @@ export default function HabitCard({
     }
   }, [toggling, isMulti, onIncrement, onToggle, habit.id, habit.color, date, done])
 
-  if (compact) {
-    return (
-      <div
-        className="flex items-center gap-3 p-3 rounded-2xl transition-all duration-200"
-        style={{ background: done ? bgColor : 'var(--surface-secondary)', border: '1px solid var(--border)' }}
-      >
-        <span className="text-xl">{habit.icon}</span>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate" style={{ color: done ? habit.color : 'var(--text)' }}>
-            {habit.name}
-          </p>
-        </div>
-        <button
-          onClick={handleCheck}
-          className={`habit-check-btn ${done ? 'done' : ''}`}
-          style={done ? { background: habit.color } : {}}
-          disabled={toggling}
-          aria-label={done ? 'Tandai belum' : 'Tandai selesai'}
-        >
-          {done ? '✓' : ''}
-        </button>
-      </div>
-    )
-  }
-
   return (
     <>
       <div
-        className="glass-card p-4 animate-fade-in"
-        style={{ borderLeft: `3px solid ${habit.color}` }}
+        className="glass-card p-4 animate-fade-in transition-all duration-300"
+        style={{
+          borderLeft: `3px solid ${habit.color}`,
+          background: done ? bgColor : undefined,
+        }}
       >
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-3">
           {/* Icon */}
           <div
-            className="flex-shrink-0 w-11 h-11 rounded-2xl flex items-center justify-center text-xl"
-            style={{ background: bgColor }}
+            className="flex-shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center text-2xl"
+            style={{ background: habit.color + '20' }}
           >
             {habit.icon}
           </div>
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <h3
-                className={`font-semibold text-base truncate transition-all ${done ? 'line-through opacity-60' : ''}`}
-                style={{ color: 'var(--text)' }}
-              >
-                {habit.name}
-              </h3>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <h3
+                  className="font-bold text-sm truncate transition-all duration-300"
+                  style={{
+                    color: done ? habit.color : 'var(--text)',
+                    textDecoration: done ? 'line-through' : 'none',
+                    opacity: done ? 0.8 : 1,
+                  }}
+                >
+                  {habit.name}
+                </h3>
 
+                {/* Meta */}
+                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                  {category && (
+                    <span
+                      className="badge text-[10px]"
+                      style={{ background: category.color + '20', color: category.color }}
+                    >
+                      {category.icon} {category.name}
+                    </span>
+                  )}
+                  {isMulti && (
+                    <span
+                      className="text-[11px] font-bold"
+                      style={{ color: done ? habit.color : 'var(--text-tertiary)' }}
+                    >
+                      {log?.count ?? 0}/{habit.targetCount}×
+                    </span>
+                  )}
+                  {habit.reminderEnabled && habit.reminderTime && (
+                    <span className="text-[10px] font-semibold" style={{ color: 'var(--text-tertiary)' }}>
+                      🔔 {habit.reminderTime}
+                    </span>
+                  )}
+                </div>
+
+                {habit.description && (
+                  <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-tertiary)' }}>
+                    {habit.description}
+                  </p>
+                )}
+              </div>
+
+              {/* Right side actions */}
               <div className="flex items-center gap-1 flex-shrink-0">
                 {showActions && (
                   <div className="relative">
                     <button
                       onClick={() => setMenuOpen(v => !v)}
-                      className="btn-ghost p-1.5 rounded-lg text-base"
+                      className="btn-ghost p-2 rounded-xl text-base leading-none"
                       aria-label="Menu"
                     >⋯</button>
                     {menuOpen && (
                       <div
-                        className="absolute right-0 top-8 z-20 rounded-2xl shadow-xl border overflow-hidden min-w-[160px]"
-                        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+                        className="absolute right-0 top-9 z-20 rounded-2xl shadow-xl border overflow-hidden min-w-[168px] animate-slide-down"
+                        style={{ background: 'var(--surface)', borderColor: 'var(--border-solid)' }}
                       >
                         {onEdit && (
                           <button
                             onClick={() => { setMenuOpen(false); onEdit(habit) }}
-                            className="flex items-center gap-2 w-full px-4 py-2.5 text-sm hover:bg-[var(--surface-secondary)] transition-colors"
-                          >✏️ Edit</button>
+                            className="flex items-center gap-2.5 w-full px-4 py-3 text-sm font-medium hover:bg-[var(--surface-secondary)] transition-colors text-left"
+                            style={{ color: 'var(--text)' }}
+                          >✏️ Edit kebiasaan</button>
                         )}
                         {onArchive && (
                           <button
                             onClick={() => { setMenuOpen(false); onArchive(habit) }}
-                            className="flex items-center gap-2 w-full px-4 py-2.5 text-sm hover:bg-[var(--surface-secondary)] transition-colors"
+                            className="flex items-center gap-2.5 w-full px-4 py-3 text-sm font-medium hover:bg-[var(--surface-secondary)] transition-colors text-left"
+                            style={{ color: 'var(--text)' }}
                           >📦 Arsipkan</button>
                         )}
                         {onDelete && (
-                          <button
-                            onClick={() => { setMenuOpen(false); setConfirmDelete(true) }}
-                            className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
-                          >🗑 Hapus</button>
+                          <>
+                            <div style={{ height: '1px', background: 'var(--border-solid)' }} />
+                            <button
+                              onClick={() => { setMenuOpen(false); setConfirmDelete(true) }}
+                              className="flex items-center gap-2.5 w-full px-4 py-3 text-sm font-medium hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors text-left text-red-500"
+                            >🗑 Hapus permanen</button>
+                          </>
                         )}
                       </div>
                     )}
@@ -161,50 +181,31 @@ export default function HabitCard({
                 {/* Check button */}
                 <button
                   onClick={handleCheck}
-                  className={`habit-check-btn ${done ? 'done' : ''}`}
-                  style={done ? { background: habit.color } : {}}
                   disabled={toggling}
+                  className={`check-btn ${done ? 'done' : ''}`}
+                  style={done ? { background: habit.color } : {}}
                   aria-label={done ? 'Tandai belum' : 'Tandai selesai'}
                 >
-                  <span className={`text-sm transition-all ${toggling ? 'opacity-50' : ''}`}>
-                    {done ? '✓' : ''}
-                  </span>
+                  {done
+                    ? <span className="text-sm">✓</span>
+                    : toggling
+                    ? <span className="text-xs animate-spin">◌</span>
+                    : null
+                  }
                 </button>
               </div>
             </div>
 
-            {/* Meta row */}
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              {category && (
-                <span
-                  className="badge text-xs"
-                  style={{ background: category.color + '20', color: category.color }}
-                >
-                  {category.icon} {category.name}
-                </span>
-              )}
-              {isMulti && (
-                <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>
-                  {log?.count ?? 0}/{habit.targetCount}×
-                </span>
-              )}
-            </div>
-
-            {/* Description */}
-            {habit.description && (
-              <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-tertiary)' }}>
-                {habit.description}
-              </p>
-            )}
-
-            {/* Progress bar (for multi-target) */}
+            {/* Progress bar for multi-target */}
             {isMulti && (
-              <div className="progress-bar mt-2.5">
+              <div className="progress-bar mt-2.5 h-1.5">
                 <div
                   className="progress-fill"
                   style={{
                     width: `${percent}%`,
-                    background: done ? habit.color : `linear-gradient(90deg, ${habit.color}, ${habit.color}99)`,
+                    background: done
+                      ? habit.color
+                      : `linear-gradient(90deg, ${habit.color}aa, ${habit.color})`,
                   }}
                 />
               </div>
@@ -226,7 +227,7 @@ export default function HabitCard({
         <ConfirmDialog
           isOpen={confirmDelete}
           title="Hapus Kebiasaan?"
-          message={`Kebiasaan "${habit.name}" dan seluruh riwayatnya akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.`}
+          message={`"${habit.name}" dan seluruh riwayatnya akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.`}
           onConfirm={() => { setConfirmDelete(false); onDelete(habit) }}
           onCancel={() => setConfirmDelete(false)}
         />

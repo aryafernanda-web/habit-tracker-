@@ -2,17 +2,22 @@
 
 import { useState, useEffect } from 'react'
 import Modal from './Modal'
-import type { Habit, Category } from '@/lib/types'
+import type { Habit } from '@/lib/types'
 import { useHabits } from '@/lib/context'
 import { generateId, validateHabitName } from '@/lib/utils'
 
 const DAYS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+
 const PRESET_COLORS = [
-  '#3b63fb', '#d946ef', '#22c55e', '#f59e0b', '#ef4444',
-  '#06b6d4', '#8b5cf6', '#f97316', '#14b8a6', '#ec4899',
+  '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316',
+  '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#84cc16',
 ]
-const PRESET_ICONS = ['⭐', '🏃', '📚', '💪', '🧘', '💧', '🥗', '😴', '💼', '🎯',
-                       '✍️', '🎸', '🌱', '🧹', '💰', '📝', '🏊', '🚴', '🙏', '❤️']
+
+const PRESET_ICONS = [
+  '⭐', '🏃', '📚', '💪', '🧘', '💧', '🥗', '😴', '💼', '🎯',
+  '✍️', '🎸', '🌱', '🧹', '💰', '📝', '🏊', '🚴', '🙏', '❤️',
+  '🧠', '🏋️', '🎨', '🎵', '🌅',
+]
 
 interface HabitFormProps {
   isOpen: boolean
@@ -24,39 +29,43 @@ const emptyForm = () => ({
   name: '',
   description: '',
   categoryId: '',
-  color: '#3b63fb',
+  color: '#6366f1',
   icon: '⭐',
   frequencyType: 'daily' as 'daily' | 'weekly' | 'custom',
   daysOfWeek: [1, 2, 3, 4, 5] as number[],
   intervalDays: 2,
   targetCount: 1,
-  reminderTime: '',
+  reminderEnabled: false,
+  reminderTime: '08:00',
 })
 
 export default function HabitForm({ isOpen, onClose, editHabit }: HabitFormProps) {
   const { addHabit, updateHabit, categories } = useHabits()
-  const [form, setForm] = useState(emptyForm())
+  const [form,   setForm]   = useState(emptyForm())
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (editHabit) {
-      setForm({
-        name: editHabit.name,
-        description: editHabit.description ?? '',
-        categoryId: editHabit.categoryId,
-        color: editHabit.color,
-        icon: editHabit.icon,
-        frequencyType: editHabit.frequency.type,
-        daysOfWeek: editHabit.frequency.daysOfWeek ?? [1,2,3,4,5],
-        intervalDays: editHabit.frequency.intervalDays ?? 2,
-        targetCount: editHabit.targetCount,
-        reminderTime: editHabit.reminderTime ?? '',
-      })
-    } else {
-      setForm(emptyForm())
+    if (isOpen) {
+      if (editHabit) {
+        setForm({
+          name:            editHabit.name,
+          description:     editHabit.description ?? '',
+          categoryId:      editHabit.categoryId,
+          color:           editHabit.color,
+          icon:            editHabit.icon,
+          frequencyType:   editHabit.frequency.type,
+          daysOfWeek:      editHabit.frequency.daysOfWeek ?? [1, 2, 3, 4, 5],
+          intervalDays:    editHabit.frequency.intervalDays ?? 2,
+          targetCount:     editHabit.targetCount,
+          reminderEnabled: editHabit.reminderEnabled ?? false,
+          reminderTime:    editHabit.reminderTime ?? '08:00',
+        })
+      } else {
+        setForm(emptyForm())
+      }
+      setErrors({})
     }
-    setErrors({})
   }, [editHabit, isOpen])
 
   useEffect(() => {
@@ -82,18 +91,19 @@ export default function HabitForm({ isOpen, onClose, editHabit }: HabitFormProps
     setSaving(true)
     try {
       const habitData = {
-        name: form.name.trim(),
-        description: form.description.trim() || undefined,
-        categoryId: form.categoryId,
-        color: form.color,
-        icon: form.icon,
+        name:            form.name.trim(),
+        description:     form.description.trim() || undefined,
+        categoryId:      form.categoryId,
+        color:           form.color,
+        icon:            form.icon,
         frequency: {
-          type: form.frequencyType,
+          type:         form.frequencyType,
           ...(form.frequencyType === 'weekly' ? { daysOfWeek: form.daysOfWeek } : {}),
-          ...(form.frequencyType === 'custom' ? { intervalDays: form.intervalDays } : {}),
+          ...(form.frequencyType === 'custom'  ? { intervalDays: form.intervalDays } : {}),
         },
-        targetCount: form.targetCount,
-        reminderTime: form.reminderTime || undefined,
+        targetCount:     form.targetCount,
+        reminderEnabled: form.reminderEnabled,
+        reminderTime:    form.reminderEnabled ? form.reminderTime : undefined,
       }
       if (editHabit) {
         await updateHabit({ ...editHabit, ...habitData })
@@ -116,53 +126,79 @@ export default function HabitForm({ isOpen, onClose, editHabit }: HabitFormProps
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={editHabit ? 'Edit Kebiasaan' : 'Tambah Kebiasaan'} size="md">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={editHabit ? 'Edit Kebiasaan' : 'Tambah Kebiasaan Baru'}
+      size="md"
+    >
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-        {/* Icon & Color row */}
-        <div className="flex items-center gap-4">
+
+        {/* ── Icon + Color ───────────────────────────────────────────────── */}
+        <div className="flex gap-4">
           {/* Icon picker */}
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 flex-shrink-0">
             <label className="label">Ikon</label>
-            <div className="grid grid-cols-5 gap-1 p-2 rounded-xl" style={{ background: 'var(--surface-tertiary)' }}>
+            <div
+              className="grid grid-cols-5 gap-1 p-2 rounded-2xl"
+              style={{ background: 'var(--surface-tertiary)', maxHeight: '160px', overflowY: 'auto' }}
+            >
               {PRESET_ICONS.map(ic => (
                 <button
                   key={ic} type="button"
                   onClick={() => setForm(p => ({ ...p, icon: ic }))}
-                  className={`text-lg p-1.5 rounded-lg transition-all ${form.icon === ic ? 'scale-110' : 'hover:scale-105'}`}
-                  style={form.icon === ic ? { boxShadow: `0 0 0 2px ${form.color}`, background: form.color + '22' } : {}}
-                >{ic}</button>
+                  className="text-xl p-1.5 rounded-xl transition-all hover:scale-110"
+                  style={form.icon === ic
+                    ? { boxShadow: `0 0 0 2px ${form.color}`, background: form.color + '22', transform: 'scale(1.15)' }
+                    : {}}
+                >
+                  {ic}
+                </button>
               ))}
             </div>
           </div>
-          {/* Color picker */}
-          <div className="flex flex-col gap-1.5 flex-1">
+
+          {/* Color picker + preview */}
+          <div className="flex flex-col gap-1.5 flex-1 min-w-0">
             <label className="label">Warna</label>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-5 gap-2 mb-2">
               {PRESET_COLORS.map(c => (
                 <button
                   key={c} type="button"
                   onClick={() => setForm(p => ({ ...p, color: c }))}
-                  className="aspect-square rounded-lg transition-all hover:scale-110"
+                  className="aspect-square rounded-xl transition-all hover:scale-110"
                   style={{
                     background: c,
-                    outline: form.color === c ? `3px solid ${c}` : 'none',
-                    outlineOffset: '2px',
-                    transform: form.color === c ? 'scale(1.15)' : undefined,
+                    transform: form.color === c ? 'scale(1.2)' : undefined,
+                    boxShadow: form.color === c ? `0 0 0 3px white, 0 0 0 5px ${c}` : undefined,
                   }}
                 />
               ))}
             </div>
-            {/* Preview */}
-            <div className="flex items-center gap-2 mt-1 p-2 rounded-lg" style={{ background: form.color + '18' }}>
-              <span className="text-xl">{form.icon}</span>
-              <span className="text-sm font-semibold" style={{ color: form.color }}>
-                {form.name || 'Preview kebiasaan'}
-              </span>
+            {/* Preview card */}
+            <div
+              className="flex items-center gap-2.5 p-3 rounded-2xl flex-1"
+              style={{ background: form.color + '18' }}
+            >
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
+                style={{ background: form.color + '30' }}
+              >
+                {form.icon}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold truncate" style={{ color: form.color }}>
+                  {form.name || 'Preview kebiasaan'}
+                </p>
+                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  {form.description || 'Deskripsi kebiasaan'}
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Name */}
+        {/* ── Name ──────────────────────────────────────────────────────── */}
         <div>
           <label className="label" htmlFor="habit-name">Nama Kebiasaan *</label>
           <input
@@ -170,13 +206,13 @@ export default function HabitForm({ isOpen, onClose, editHabit }: HabitFormProps
             className="input-field"
             placeholder="Contoh: Olahraga 30 menit"
             value={form.name}
-            onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+            onChange={e => { setForm(p => ({ ...p, name: e.target.value })); setErrors(x => ({ ...x, name: '' })) }}
             maxLength={100}
           />
-          {errors.name && <p className="text-xs mt-1 text-red-500">{errors.name}</p>}
+          {errors.name && <p className="text-xs mt-1.5 text-red-500 font-medium">⚠ {errors.name}</p>}
         </div>
 
-        {/* Description */}
+        {/* ── Description ───────────────────────────────────────────────── */}
         <div>
           <label className="label" htmlFor="habit-desc">Deskripsi (opsional)</label>
           <textarea
@@ -189,24 +225,24 @@ export default function HabitForm({ isOpen, onClose, editHabit }: HabitFormProps
           />
         </div>
 
-        {/* Category */}
+        {/* ── Category ──────────────────────────────────────────────────── */}
         <div>
           <label className="label" htmlFor="habit-cat">Kategori *</label>
           <select
             id="habit-cat"
             className="input-field"
             value={form.categoryId}
-            onChange={e => setForm(p => ({ ...p, categoryId: e.target.value }))}
+            onChange={e => { setForm(p => ({ ...p, categoryId: e.target.value })); setErrors(x => ({ ...x, categoryId: '' })) }}
           >
             <option value="">— Pilih Kategori —</option>
             {categories.map(c => (
               <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
             ))}
           </select>
-          {errors.categoryId && <p className="text-xs mt-1 text-red-500">{errors.categoryId}</p>}
+          {errors.categoryId && <p className="text-xs mt-1.5 text-red-500 font-medium">⚠ {errors.categoryId}</p>}
         </div>
 
-        {/* Frequency */}
+        {/* ── Frequency ─────────────────────────────────────────────────── */}
         <div>
           <label className="label">Frekuensi</label>
           <div className="tab-bar">
@@ -216,73 +252,129 @@ export default function HabitForm({ isOpen, onClose, editHabit }: HabitFormProps
                 className={`tab-item ${form.frequencyType === t ? 'active' : ''}`}
                 onClick={() => setForm(p => ({ ...p, frequencyType: t }))}
               >
-                {t === 'daily' ? 'Setiap Hari' : t === 'weekly' ? 'Mingguan' : 'Kustom'}
+                {t === 'daily' ? '📅 Harian' : t === 'weekly' ? '📆 Mingguan' : '🔄 Kustom'}
               </button>
             ))}
           </div>
 
           {form.frequencyType === 'weekly' && (
             <div className="mt-3">
-              <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>Pilih hari:</p>
-              <div className="flex gap-1.5 flex-wrap">
+              <p className="text-xs mb-2 font-semibold" style={{ color: 'var(--text-secondary)' }}>Pilih hari:</p>
+              <div className="flex gap-2 flex-wrap">
                 {DAYS.map((day, i) => (
                   <button
                     key={i} type="button"
                     onClick={() => toggleDay(i)}
-                    className="w-9 h-9 rounded-full text-xs font-bold transition-all"
+                    className="w-10 h-10 rounded-full text-xs font-bold transition-all hover:scale-105"
                     style={form.daysOfWeek.includes(i)
-                      ? { background: form.color, color: '#fff' }
+                      ? { background: form.color, color: '#fff', boxShadow: `0 4px 12px ${form.color}44` }
                       : { background: 'var(--surface-tertiary)', color: 'var(--text-secondary)' }
                     }
                   >{day}</button>
                 ))}
               </div>
-              {errors.days && <p className="text-xs mt-1 text-red-500">{errors.days}</p>}
+              {errors.days && <p className="text-xs mt-1.5 text-red-500 font-medium">⚠ {errors.days}</p>}
             </div>
           )}
 
           {form.frequencyType === 'custom' && (
             <div className="mt-3 flex items-center gap-3">
-              <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Setiap</span>
+              <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Setiap</span>
               <input
                 type="number" min={1} max={90}
                 className="input-field w-20 text-center"
                 value={form.intervalDays}
-                onChange={e => setForm(p => ({ ...p, intervalDays: Number(e.target.value) }))}
+                onChange={e => setForm(p => ({ ...p, intervalDays: Math.max(1, Math.min(90, Number(e.target.value))) }))}
               />
-              <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>hari</span>
+              <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>hari sekali</span>
             </div>
           )}
         </div>
 
-        {/* Target count */}
+        {/* ── Target count ───────────────────────────────────────────────── */}
         <div>
           <label className="label">Target Per Hari</label>
           <div className="flex items-center gap-3">
             <button
               type="button"
-              className="w-9 h-9 rounded-xl font-bold text-lg transition-all hover:scale-105"
+              className="w-10 h-10 rounded-xl font-bold text-lg transition-all hover:scale-105"
               style={{ background: 'var(--surface-tertiary)', color: 'var(--text)' }}
               onClick={() => setForm(p => ({ ...p, targetCount: Math.max(1, p.targetCount - 1) }))}
             >−</button>
-            <span className="text-xl font-bold w-8 text-center" style={{ color: 'var(--text)' }}>
+            <div
+              className="w-16 h-10 rounded-xl flex items-center justify-center text-xl font-extrabold"
+              style={{ background: form.color + '15', color: form.color }}
+            >
               {form.targetCount}
-            </span>
+            </div>
             <button
               type="button"
-              className="w-9 h-9 rounded-xl font-bold text-lg transition-all hover:scale-105"
+              className="w-10 h-10 rounded-xl font-bold text-lg transition-all hover:scale-105"
               style={{ background: 'var(--surface-tertiary)', color: 'var(--text)' }}
               onClick={() => setForm(p => ({ ...p, targetCount: Math.min(99, p.targetCount + 1) }))}
             >+</button>
-            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>kali/hari</span>
+            <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>kali/hari</span>
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex gap-3 pt-2">
-          <button type="button" onClick={onClose} className="btn-secondary flex-1">Batal</button>
+        {/* ── Reminder / Notification time ────────────────────────────────── */}
+        <div
+          className="rounded-2xl p-4"
+          style={{ background: 'var(--surface-secondary)', border: '1.5px solid var(--border-solid)' }}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🔔</span>
+              <div>
+                <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>Pengingat Harian</p>
+                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  Notifikasi di waktu tertentu
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={form.reminderEnabled}
+              onClick={() => setForm(p => ({ ...p, reminderEnabled: !p.reminderEnabled }))}
+              className="toggle"
+              style={{ background: form.reminderEnabled ? form.color : 'var(--border-solid)' }}
+            >
+              <span
+                className="toggle-knob"
+                style={{ left: form.reminderEnabled ? '26px' : '4px' }}
+              />
+            </button>
+          </div>
+
+          {form.reminderEnabled && (
+            <div className="animate-fade-in">
+              <label className="label" htmlFor="reminder-time">Waktu Pengingat</label>
+              <input
+                id="reminder-time"
+                type="time"
+                className="input-field"
+                value={form.reminderTime}
+                onChange={e => setForm(p => ({ ...p, reminderTime: e.target.value }))}
+              />
+              <p className="text-xs mt-2" style={{ color: 'var(--text-tertiary)' }}>
+                ⚠️ Notifikasi hanya berfungsi saat aplikasi terbuka atau diinstal sebagai PWA
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* ── Actions ───────────────────────────────────────────────────── */}
+        <div className="flex gap-3 pt-1">
+          <button type="button" onClick={onClose} className="btn-secondary flex-1">
+            Batal
+          </button>
           <button type="submit" className="btn-primary flex-1" disabled={saving}>
-            {saving ? '⏳ Menyimpan…' : editHabit ? '✓ Simpan' : '+ Tambah'}
+            {saving ? (
+              <span className="flex items-center gap-2">
+                <span className="animate-spin text-xs">◌</span> Menyimpan…
+              </span>
+            ) : editHabit ? '✓ Simpan Perubahan' : '+ Tambah Kebiasaan'}
           </button>
         </div>
       </form>

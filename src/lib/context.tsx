@@ -1,17 +1,21 @@
 'use client'
 
 import React, {
-  createContext, useContext, useEffect, useState, useCallback, useRef
+  createContext, useContext, useEffect, useState, useCallback, useMemo
 } from 'react'
 import type { Habit, Category, HabitLog, AppSettings, Theme } from '@/lib/types'
 import {
   getAllHabits, saveHabit, deleteHabit,
   getAllCategories, saveCategory, deleteCategory,
-  getLogsByDate, saveLog, getAllLogs, getLogsByHabit,
+  getAllLogs, saveLog, getLogsByHabit,
   getSetting, setSetting,
   ensureDefaultCategories, importAllData,
 } from '@/lib/db'
 import { generateId, todayStr } from '@/lib/utils'
+import {
+  scheduleReminders, requestNotificationPermission, notificationsGranted,
+  sendTestNotification, getNotificationPermission, NotificationPermissionStatus
+} from '@/lib/notifications'
 
 // ─── Context type ──────────────────────────────────────────────────────────────
 
@@ -19,9 +23,11 @@ interface HabitContextValue {
   // State
   habits: Habit[]
   categories: Category[]
+  logs: HabitLog[]
   todayLogs: HabitLog[]
   settings: AppSettings
   isLoading: boolean
+  notificationStatus: NotificationPermissionStatus
 
   // Habit actions
   addHabit: (habit: Omit<Habit, 'id' | 'createdAt' | 'order'>) => Promise<void>
@@ -39,10 +45,15 @@ interface HabitContextValue {
   toggleHabitLog: (habitId: string, date: string) => Promise<void>
   incrementLog: (habitId: string, date: string) => Promise<void>
   getLogsForHabit: (habitId: string) => Promise<HabitLog[]>
+  refreshLogs: () => Promise<void>
   refreshTodayLogs: () => Promise<void>
 
   // Settings
   updateSettings: (patch: Partial<AppSettings>) => Promise<void>
+
+  // Notifications
+  enableNotifications: () => Promise<boolean>
+  testNotification: () => Promise<boolean>
 
   // Data management
   exportData: () => Promise<{ habits: Habit[]; categories: Category[]; logs: HabitLog[] }>
@@ -64,6 +75,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   weekStartsOnMonday: true,
   showCompletedHabits: true,
   defaultView: 'today',
+  notificationsEnabled: false,
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
@@ -71,9 +83,16 @@ const DEFAULT_SETTINGS: AppSettings = {
 export function HabitProvider({ children }: { children: React.ReactNode }) {
   const [habits,     setHabits]     = useState<Habit[]>([])
   const [categories, setCategories] = useState<Category[]>([])
-  const [todayLogs,  setTodayLogs]  = useState<HabitLog[]>([])
+  const [logs,       setLogs]       = useState<HabitLog[]>([])
   const [settings,   setSettings]   = useState<AppSettings>(DEFAULT_SETTINGS)
   const [isLoading,  setIsLoading]  = useState(true)
+  const [notifStatus, setNotifStatus] = useState<NotificationPermissionStatus>('default')
+
+  // Derive todayLogs from all logs
+  const today = todayStr()
+  const todayLogs = useMemo(() => {
+    return logs.filter(l => l.date === today)
+  }, [logs, today])
 
   // ── Bootstrap ───────────────────────────────────────────────────────────────
 
@@ -81,19 +100,27 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
     async function init() {
       try {
         await ensureDefaultCategories()
-        const [h, c, logs, theme, wsMon, showDone, defView] = await Promise.all([
+        const [h, c, allLogs, theme, wsMon, showDone, defView, notifEnabled] = await Promise.all([
           getAllHabits(),
           getAllCategories(),
-          getLogsByDate(todayStr()),
+          getAllLogs(),
           getSetting<Theme>('theme', 'system'),
           getSetting<boolean>('weekStartsOnMonday', true),
           getSetting<boolean>('showCompletedHabits', true),
           getSetting<'today' | 'week'>('defaultView', 'today'),
+          getSetting<boolean>('notificationsEnabled', false),
         ])
-        setHabits(h.sort((a, b) => a.order - b.order))
+        const sortedHabits = h.sort((a, b) => a.order - b.order)
+        setHabits(sortedHabits)
         setCategories(c)
-        setTodayLogs(logs)
-        setSettings({ theme, weekStartsOnMonday: wsMon, showCompletedHabits: showDone, defaultView: defView })
+        setLogs(allLogs)
+        setSettings({ theme, weekStartsOnMonday: wsMon, showCompletedHabits: showDone, defaultView: defView, notificationsEnabled: notifEnabled })
+        setNotifStatus(getNotificationPermission())
+
+        // Schedule reminders if enabled
+        if (notifEnabled && notificationsGranted()) {
+          scheduleReminders(sortedHabits)
+        }
       } finally {
         setIsLoading(false)
       }
@@ -111,13 +138,25 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       order: habits.length,
     }
     await saveHabit(habit)
-    setHabits(prev => [...prev, habit])
-  }, [habits.length])
+    setHabits(prev => {
+      const next = [...prev, habit]
+      if (settings.notificationsEnabled && notificationsGranted()) {
+        scheduleReminders(next)
+      }
+      return next
+    })
+  }, [habits.length, settings.notificationsEnabled])
 
   const updateHabit = useCallback(async (habit: Habit) => {
     await saveHabit(habit)
-    setHabits(prev => prev.map(h => h.id === habit.id ? habit : h))
-  }, [])
+    setHabits(prev => {
+      const next = prev.map(h => h.id === habit.id ? habit : h)
+      if (settings.notificationsEnabled && notificationsGranted()) {
+        scheduleReminders(next)
+      }
+      return next
+    })
+  }, [settings.notificationsEnabled])
 
   const archiveHabit = useCallback(async (id: string) => {
     const h = habits.find(x => x.id === id)
@@ -130,7 +169,7 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
   const removeHabit = useCallback(async (id: string) => {
     await deleteHabit(id)
     setHabits(prev => prev.filter(h => h.id !== id))
-    setTodayLogs(prev => prev.filter(l => l.habitId !== id))
+    setLogs(prev => prev.filter(l => l.habitId !== id))
   }, [])
 
   const reorderHabits = useCallback(async (reordered: Habit[]) => {
@@ -160,59 +199,59 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
   // ── Log actions ──────────────────────────────────────────────────────────────
 
   const toggleHabitLog = useCallback(async (habitId: string, date: string) => {
-    const habit  = habits.find(h => h.id === habitId)
+    const habit = habits.find(h => h.id === habitId)
     if (!habit) return
 
-    const logId  = `${habitId}_${date}`
-    const all    = await getAllLogs()
-    const existing = all.find(l => l.id === logId)
-    const done   = existing && existing.count >= habit.targetCount
+    const logId = `${habitId}_${date}`
+    const existing = logs.find(l => l.id === logId)
+    const done = existing && existing.count >= habit.targetCount
 
-    const log: HabitLog = {
+    const newLog: HabitLog = {
       id: logId,
       habitId,
       date,
       count: done ? 0 : habit.targetCount,
       completedAt: done ? undefined : new Date().toISOString(),
     }
-    await saveLog(log)
+    await saveLog(newLog)
 
-    if (date === todayStr()) {
-      setTodayLogs(prev => {
-        const others = prev.filter(l => l.id !== logId)
-        return log.count > 0 ? [...others, log] : others
-      })
-    }
-  }, [habits])
+    setLogs(prev => {
+      const others = prev.filter(l => l.id !== logId)
+      return newLog.count > 0 ? [...others, newLog] : others
+    })
+  }, [habits, logs])
 
   const incrementLog = useCallback(async (habitId: string, date: string) => {
     const habit = habits.find(h => h.id === habitId)
     if (!habit) return
 
-    const logId   = `${habitId}_${date}`
-    const all     = await getAllLogs()
-    const existing = all.find(l => l.id === logId)
+    const logId = `${habitId}_${date}`
+    const existing = logs.find(l => l.id === logId)
     const newCount = Math.min((existing?.count ?? 0) + 1, habit.targetCount)
 
-    const log: HabitLog = {
-      id: logId, habitId, date,
+    const newLog: HabitLog = {
+      id: logId,
+      habitId,
+      date,
       count: newCount,
       completedAt: newCount >= habit.targetCount ? new Date().toISOString() : existing?.completedAt,
     }
-    await saveLog(log)
+    await saveLog(newLog)
 
-    if (date === todayStr()) {
-      setTodayLogs(prev => {
-        const others = prev.filter(l => l.id !== logId)
-        return newCount > 0 ? [...others, log] : others
-      })
-    }
-  }, [habits])
+    setLogs(prev => {
+      const others = prev.filter(l => l.id !== logId)
+      return newCount > 0 ? [...others, newLog] : others
+    })
+  }, [habits, logs])
+
+  const refreshLogs = useCallback(async () => {
+    const all = await getAllLogs()
+    setLogs(all)
+  }, [])
 
   const refreshTodayLogs = useCallback(async () => {
-    const logs = await getLogsByDate(todayStr())
-    setTodayLogs(logs)
-  }, [])
+    await refreshLogs()
+  }, [refreshLogs])
 
   const getLogsForHabit = useCallback((habitId: string) => {
     return getLogsByHabit(habitId)
@@ -226,7 +265,31 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
     await Promise.all(
       Object.entries(patch).map(([k, v]) => setSetting(k, v))
     )
-  }, [settings])
+    if ('notificationsEnabled' in patch) {
+      if (patch.notificationsEnabled && notificationsGranted()) {
+        scheduleReminders(habits)
+      }
+    }
+  }, [settings, habits])
+
+  // ── Notifications ─────────────────────────────────────────────────────────────
+
+  const enableNotifications = useCallback(async (): Promise<boolean> => {
+    const result = await requestNotificationPermission()
+    setNotifStatus(result)
+    if (result === 'granted') {
+      await updateSettings({ notificationsEnabled: true })
+      scheduleReminders(habits)
+      return true
+    }
+    return false
+  }, [habits, updateSettings])
+
+  const testNotification = useCallback(async (): Promise<boolean> => {
+    const success = await sendTestNotification()
+    setNotifStatus(getNotificationPermission())
+    return success
+  }, [])
 
   // ── Data management ───────────────────────────────────────────────────────────
 
@@ -237,21 +300,26 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
 
   const importData = useCallback(async (data: { habits: Habit[]; categories: Category[]; logs: HabitLog[] }) => {
     await importAllData(data.habits, data.categories, data.logs)
-    const today = todayStr()
-    const [h, c, l] = await Promise.all([getAllHabits(), getAllCategories(), getLogsByDate(today)])
-    setHabits(h.sort((a, b) => a.order - b.order))
+    const [h, c, l] = await Promise.all([getAllHabits(), getAllCategories(), getAllLogs()])
+    const sorted = h.sort((a, b) => a.order - b.order)
+    setHabits(sorted)
     setCategories(c)
-    setTodayLogs(l)
-  }, [])
+    setLogs(l)
+    if (settings.notificationsEnabled && notificationsGranted()) {
+      scheduleReminders(sorted)
+    }
+  }, [settings.notificationsEnabled])
 
   // ── Context value ─────────────────────────────────────────────────────────────
 
   const value: HabitContextValue = {
-    habits, categories, todayLogs, settings, isLoading,
+    habits, categories, logs, todayLogs, settings, isLoading,
+    notificationStatus: notifStatus,
     addHabit, updateHabit, archiveHabit, removeHabit, reorderHabits,
     addCategory, updateCategory, removeCategory,
-    toggleHabitLog, incrementLog, getLogsForHabit, refreshTodayLogs,
+    toggleHabitLog, incrementLog, getLogsForHabit, refreshLogs, refreshTodayLogs,
     updateSettings,
+    enableNotifications, testNotification,
     exportData, importData,
   }
 
