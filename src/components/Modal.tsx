@@ -2,6 +2,9 @@
 
 import { useEffect, useRef } from 'react'
 
+// ── Track how many modals are open so we never reset overflow too early ──────
+let openModalCount = 0
+
 interface ModalProps {
   isOpen: boolean
   onClose: () => void
@@ -15,11 +18,18 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
 
   useEffect(() => {
     if (isOpen) {
+      openModalCount++
       document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
     }
-    return () => { document.body.style.overflow = '' }
+    return () => {
+      if (isOpen) {
+        openModalCount--
+        if (openModalCount <= 0) {
+          openModalCount = 0
+          document.body.style.overflow = ''
+        }
+      }
+    }
   }, [isOpen])
 
   useEffect(() => {
@@ -47,19 +57,18 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
       aria-modal="true"
     >
       <div className={`modal-box ${sizeClass}`}>
-        {/* Sticky header inside modal */}
-        <div className="px-6 pt-5 flex-shrink-0">
-          {/* Drag handle for mobile */}
+        {/* Drag handle + header — pinned at top, never scrolls */}
+        <div className="px-6 pt-5 pb-1 flex-shrink-0">
           <div className="flex justify-center mb-3 md:hidden">
-            <div className="w-10 h-1 rounded-full opacity-60" style={{ background: 'var(--border)' }} />
+            <div className="w-10 h-1 rounded-full opacity-40" style={{ background: 'var(--border)' }} />
           </div>
 
           {title && (
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-2">
               <h2 className="text-lg font-bold" style={{ color: 'var(--text)' }}>{title}</h2>
               <button
                 onClick={onClose}
-                className="w-8 h-8 flex items-center justify-center rounded-xl transition-colors hover:bg-[var(--surface-tertiary)]"
+                className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors hover:bg-[var(--surface-tertiary)]"
                 style={{ color: 'var(--text-secondary)' }}
                 aria-label="Tutup"
               >
@@ -69,8 +78,8 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
           )}
         </div>
 
-        {/* Scrollable body */}
-        <div className="modal-scroll px-6 pb-8 min-h-0 flex-1">
+        {/* Scrollable body — extra bottom padding so nav bar never clips content */}
+        <div className="modal-scroll px-6 pb-10">
           {children}
         </div>
       </div>
@@ -79,6 +88,8 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
 }
 
 // ─── Confirm Dialog ───────────────────────────────────────────────────────────
+// Renders as a SIBLING of any parent modal (via its own modal-overlay).
+// This avoids the nested-modal body.overflow bug on Android.
 
 interface ConfirmDialogProps {
   isOpen: boolean

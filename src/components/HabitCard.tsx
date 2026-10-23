@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import type { Habit, HabitLog, Category } from '@/lib/types'
 import { isCompleted, completionPercent, colorWithOpacity } from '@/lib/utils'
 import { ConfirmDialog } from './Modal'
@@ -49,6 +49,20 @@ export default function HabitCard({
   const [menuOpen,       setMenuOpen]       = useState(false)
   const [confirmDelete,  setConfirmDelete]  = useState(false)
   const [toggling,       setToggling]       = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (!menuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    // Delay so the open-click doesn't immediately close
+    const t = setTimeout(() => document.addEventListener('mousedown', handler), 50)
+    return () => { clearTimeout(t); document.removeEventListener('mousedown', handler) }
+  }, [menuOpen])
 
   const done    = isCompleted(log, habit)
   const percent = completionPercent(log, habit)
@@ -153,7 +167,7 @@ export default function HabitCard({
               {/* Right side actions */}
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 {showActions && (
-                  <div className="relative">
+                  <div className="relative" ref={menuRef}>
                     <button
                       onClick={() => setMenuOpen(v => !v)}
                       className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[var(--surface-secondary)] text-base transition-colors"
@@ -162,8 +176,8 @@ export default function HabitCard({
                     >⋯</button>
                     {menuOpen && (
                       <div
-                        className="absolute right-0 top-9 z-20 rounded-2xl shadow-xl border overflow-hidden min-w-[168px] animate-slide-down"
-                        style={{ background: 'var(--surface)', borderColor: 'var(--border-solid)' }}
+                        className="absolute right-0 top-10 z-50 rounded-2xl shadow-2xl border overflow-hidden min-w-[180px] animate-slide-down"
+                        style={{ background: 'var(--surface)', borderColor: 'var(--border-solid)', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}
                       >
                         {onEdit && (
                           <button
@@ -229,13 +243,7 @@ export default function HabitCard({
         </div>
       </div>
 
-      {/* Backdrop for menu */}
-      {menuOpen && (
-        <div
-          className="fixed inset-0 z-10"
-          onClick={() => setMenuOpen(false)}
-        />
-      )}
+      {/* (backdrop removed — now using document mousedown listener via useEffect) */}
 
       {/* Delete confirm */}
       {onDelete && (

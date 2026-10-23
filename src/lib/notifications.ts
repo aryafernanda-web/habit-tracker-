@@ -1,24 +1,27 @@
 /**
  * Notification utilities for PWA habit reminders.
- * Specifically tuned for Android Chrome / PWA and desktop browsers.
- * Uses ServiceWorkerRegistration.showNotification() for Android Chrome compatibility
- * with fallback to Web Notifications API.
+ * Tuned for Android Chrome / Samsung Internet PWA and desktop browsers.
+ *
+ * Strategy:
+ *  1. Try ServiceWorkerRegistration.showNotification() — required for Android Chrome PWA
+ *  2. Fallback: try navigator.serviceWorker.ready with timeout
+ *  3. Last resort: new Notification() constructor (works on desktop, limited on Android)
  */
 
 export type NotificationPermissionStatus = 'default' | 'granted' | 'denied' | 'unsupported'
 
-/** Check if notifications are supported by the browser */
+/** Check if the Notification API is available */
 export function notificationsSupported(): boolean {
   return typeof window !== 'undefined' && 'Notification' in window
 }
 
-/** Check current notification permission */
+/** Current notification permission */
 export function getNotificationPermission(): NotificationPermissionStatus {
   if (!notificationsSupported()) return 'unsupported'
   return Notification.permission as NotificationPermissionStatus
 }
 
-/** Check if notifications are granted */
+/** True if permission is already granted */
 export function notificationsGranted(): boolean {
   return notificationsSupported() && Notification.permission === 'granted'
 }
@@ -31,87 +34,104 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
     const result = await Notification.requestPermission()
     return result as NotificationPermissionStatus
   } catch (err) {
-    console.warn('Failed to request notification permission:', err)
+    console.warn('[HabitNotif] Permission request failed:', err)
     return 'denied'
   }
 }
 
-async function getRegistrationSafe(): Promise<ServiceWorkerRegistration | null> {
+// ─── Service Worker helper ─────────────────────────────────────────────────
+
+let _cachedReg: ServiceWorkerRegistration | null = null
+
+/** Get or register service worker, with a timeout so we never hang forever */
+async function getSWReg(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return null
+  if (_cachedReg) return _cachedReg
+
   try {
-    const existing = await navigator.serviceWorker.getRegistration()
-    if (existing) return existing
+    // 1. Try already-registered
+    const existing = await navigator.serviceWorker.getRegistration('/')
+    if (existing) { _cachedReg = existing; return existing }
 
-    const registered = await navigator.serviceWorker.register('/sw.js').catch(() => null)
-    if (registered) return registered
+    // 2. Register explicitly
+    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => null)
+    if (reg) { _cachedReg = reg; return reg }
 
-    const readyPromise = navigator.serviceWorker.ready
-    const timeoutPromise = new Promise<null>(resolve => setTimeout(() => resolve(null), 1500))
-    return await Promise.race([readyPromise, timeoutPromise])
-  } catch {
-    return null
+    // 3. Wait for `ready` with 2s timeout
+    const readyRace = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<null>(r => setTimeout(() => r(null), 2000)),
+    ])
+    if (readyRace) { _cachedReg = readyRace as ServiceWorkerRegistration; return _cachedReg }
+  } catch (e) {
+    console.warn('[HabitNotif] SW registration error:', e)
   }
+  return null
 }
 
-/**
- * Display a notification using Service Worker if available (required by Android Chrome),
- * or native Notification constructor as fallback.
- */
+// ─── Show notification ─────────────────────────────────────────────────────
+
+const ICON = '/icons/icon-192x192.png'
+
 export async function showNotification(
   title: string,
   body: string,
-  icon = '/icons/icon-192x192.png'
+  icon = ICON
 ): Promise<boolean> {
   if (!notificationsGranted()) return false
 
-  const options: NotificationOptions = {
+  const opts: NotificationOptions = {
     body,
     icon,
     badge: icon,
-    tag: `habit-${Date.now()}`,
+    tag: `habit-reminder-${Date.now()}`,
     requireInteraction: false,
     silent: false,
+    // vibrate is valid on Android via SW — cast through any
+    ...(({ vibrate: [200, 100, 200] }) as Record<string, unknown>),
   }
 
-  // 1. Try Service Worker registration first (required for Android Chrome / PWA)
+  // ── Path 1: SW showNotification (Android Chrome, Samsung Internet) ────────
   if ('serviceWorker' in navigator) {
     try {
-      const reg = await getRegistrationSafe()
-      if (reg && reg.showNotification) {
+      const reg = await getSWReg()
+      if (reg?.showNotification) {
         await reg.showNotification(title, {
-          ...options,
-          // Vibration pattern for mobile
-          vibrate: [200, 100, 200],
+          body,
+          icon,
+          badge: icon,
+          tag: `habit-reminder-${Date.now()}`,
+          requireInteraction: false,
+          silent: false,
         } as NotificationOptions)
         return true
       }
     } catch (swErr) {
-      console.warn('Service Worker showNotification fallback:', swErr)
+      console.warn('[HabitNotif] SW showNotification failed, trying constructor:', swErr)
     }
   }
 
-  // 2. Fallback to standard window Notification constructor (desktop browsers)
+  // ── Path 2: Web Notification constructor (desktop / iOS Safari 16.4+) ───
   try {
     if (typeof Notification !== 'undefined') {
-      new Notification(title, options)
+      new Notification(title, opts)
       return true
     }
-  } catch (nErr) {
-    console.warn('Standard Notification constructor failed:', nErr)
+  } catch (e) {
+    console.warn('[HabitNotif] Notification constructor failed:', e)
   }
 
   return false
 }
 
-/** Send an immediate test notification for Android / browser verification */
+/** Send a test notification immediately after permission is granted */
 export async function sendTestNotification(): Promise<boolean> {
   const perm = await requestNotificationPermission()
   if (perm !== 'granted') return false
-
   return showNotification(
-    '⚡ Habit Tracker Berhasil Terhubung!',
-    'Notifikasi aktif di perangkatmu. Pengingat kebiasaan akan muncul sesuai jadwal.',
-    '/icons/icon-192x192.png'
+    '✅ Pengingat Habit Aktif!',
+    'Notifikasi berhasil! Kamu akan diingatkan sesuai jadwal kebiasaan.',
+    ICON
   )
 }
 
@@ -125,88 +145,79 @@ interface HabitReminderInfo {
   reminderEnabled: boolean
 }
 
-let activeHabitsForReminder: HabitReminderInfo[] = []
-let intervalCheckId: ReturnType<typeof setInterval> | null = null
-let visibilityListenerAdded = false
+let activeHabits: HabitReminderInfo[] = []
+let pollTimer: ReturnType<typeof setInterval> | null = null
+let visibilityBound = false
 
-function getTodayKey(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+function todayKey(): string {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
 }
 
-function hasFiredToday(habitId: string): boolean {
-  if (typeof window === 'undefined') return false
-  const key = `habit_notif_${habitId}_${getTodayKey()}`
-  return localStorage.getItem(key) === 'true'
+function hasFiredToday(id: string): boolean {
+  if (typeof localStorage === 'undefined') return false
+  return localStorage.getItem(`hn_${id}_${todayKey()}`) === '1'
 }
 
-function markFiredToday(habitId: string): void {
-  if (typeof window === 'undefined') return
-  const key = `habit_notif_${habitId}_${getTodayKey()}`
-  localStorage.setItem(key, 'true')
+function markFiredToday(id: string): void {
+  if (typeof localStorage === 'undefined') return
+  localStorage.setItem(`hn_${id}_${todayKey()}`, '1')
 }
 
-/**
- * Check if any habit reminders should fire right now.
- * Runs on periodic timer and whenever the app becomes visible.
- */
-function checkAndFireReminders(): void {
+/** Fire any reminders whose time window we're in right now */
+function tick(): void {
   if (!notificationsGranted()) return
-
   const now = new Date()
-  const currentMinutes = now.getHours() * 60 + now.getMinutes()
+  const curMin = now.getHours() * 60 + now.getMinutes()
 
-  for (const h of activeHabitsForReminder) {
+  for (const h of activeHabits) {
     if (!h.reminderEnabled || !h.reminderTime) continue
     if (hasFiredToday(h.id)) continue
 
     const [hh, mm] = h.reminderTime.split(':').map(Number)
-    const reminderMinutes = hh * 60 + mm
+    const targetMin = hh * 60 + mm
 
-    // If current time is within [reminderTime, reminderTime + 3 minutes] window
-    if (currentMinutes >= reminderMinutes && currentMinutes <= reminderMinutes + 3) {
+    // Fire within a 5-minute window (wider than before for reliability)
+    if (curMin >= targetMin && curMin <= targetMin + 5) {
       markFiredToday(h.id)
       showNotification(
-        `⏰ Waktunya: ${h.icon} ${h.name}`,
-        `Yuk tuntaskan kebiasaan ini sekarang!`
+        `⏰ ${h.icon} ${h.name}`,
+        `Saatnya melakukan kebiasaan ini! Jangan sampai terlewat. 💪`
       )
     }
   }
 }
 
-/**
- * Schedule habit reminders with both background interval checking
- * and window visibility wake-up triggers.
- */
+/** Register habits for reminders. Call whenever habits list changes. */
 export function scheduleReminders(habits: HabitReminderInfo[]): void {
-  activeHabitsForReminder = habits
+  activeHabits = habits.filter(h => h.reminderEnabled && h.reminderTime)
 
   if (typeof window === 'undefined') return
 
-  // Start periodic polling every 60 seconds
-  if (!intervalCheckId) {
-    intervalCheckId = setInterval(checkAndFireReminders, 60_000)
+  // Poll every 60 seconds
+  if (!pollTimer) {
+    pollTimer = setInterval(tick, 60_000)
   }
 
-  // Check immediately
-  checkAndFireReminders()
+  // Check immediately (e.g. if we just opened the app)
+  tick()
 
-  // Also check whenever user switches back to the app / unlocks phone
-  if (!visibilityListenerAdded && typeof document !== 'undefined') {
+  // Also check when user returns to app
+  if (!visibilityBound) {
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        checkAndFireReminders()
-      }
+      if (document.visibilityState === 'visible') tick()
     })
-    visibilityListenerAdded = true
+    // Also on page focus (works when switching tabs)
+    window.addEventListener('focus', tick)
+    visibilityBound = true
   }
 }
 
-/** Clear all reminders and timers */
+/** Stop all reminder polling */
 export function clearAllReminders(): void {
-  activeHabitsForReminder = []
-  if (intervalCheckId) {
-    clearInterval(intervalCheckId)
-    intervalCheckId = null
+  activeHabits = []
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
   }
 }

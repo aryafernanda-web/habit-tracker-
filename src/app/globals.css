@@ -279,8 +279,8 @@ body {
   /* ── Modal ──────────────────────────────────────────────────────────────── */
 
   .modal-overlay {
-    @apply fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4;
-    background: rgba(0,0,0,0.6);
+    @apply fixed inset-0 z-[200] flex items-end md:items-center justify-center p-0 md:p-4;
+    background: rgba(0,0,0,0.65);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     animation: fadeIn 0.2s ease-out;
@@ -288,8 +288,10 @@ body {
 
   .modal-box {
     @apply w-full md:max-w-lg rounded-t-3xl md:rounded-3xl flex flex-col;
-    max-height: 90dvh;
-    max-height: 90vh;
+    /* Leave room above for the modal not to overlap the top, and below for bottom nav */
+    max-height: calc(90dvh - var(--nav-height));
+    max-height: calc(90vh - 5rem);
+    /* On desktop (md+), restore normal centering */
     background: var(--surface);
     border-top: 1px solid var(--border-solid);
     box-shadow: var(--shadow-xl);
@@ -297,14 +299,20 @@ body {
     overflow: hidden;
   }
 
-  /* Inner scrollable area */
-  .modal-box > form,
-  .modal-box > .modal-scroll,
+  @media (min-width: 768px) {
+    .modal-box {
+      max-height: 90vh;
+    }
+  }
+
+  /* Scrollable inner area */
   .modal-scroll {
     overflow-y: auto;
-    min-height: 0;
-    flex: 1;
     -webkit-overflow-scrolling: touch;
+    flex: 1;
+    min-height: 0;
+    /* Extra bottom padding so content is never hidden under the navigation bar */
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
   }
 
   /* ── Tabs ───────────────────────────────────────────────────────────────── */
