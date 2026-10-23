@@ -105,7 +105,22 @@ export default function HabitCard({
                 </h3>
 
                 {/* Meta */}
-                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                  {/* Jam Kebiasaan Prominen */}
+                  {habit.reminderTime && (
+                    <span
+                      className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-lg"
+                      style={{
+                        background: habit.reminderEnabled ? 'rgba(99,102,241,0.15)' : 'var(--surface-tertiary)',
+                        color: habit.reminderEnabled ? 'var(--brand)' : 'var(--text-secondary)',
+                      }}
+                      title={habit.reminderEnabled ? 'Pengingat aktif' : 'Waktu kebiasaan'}
+                    >
+                      <span className="text-[10px]">{habit.reminderEnabled ? '🔔' : '⏰'}</span>
+                      <span>{habit.reminderTime}</span>
+                    </span>
+                  )}
+
                   {category && (
                     <span
                       className="badge text-[10px]"
@@ -114,35 +129,35 @@ export default function HabitCard({
                       {category.icon} {category.name}
                     </span>
                   )}
+
                   {isMulti && (
                     <span
-                      className="text-[11px] font-bold"
-                      style={{ color: done ? habit.color : 'var(--text-tertiary)' }}
+                      className="text-[11px] font-bold px-1.5 py-0.5 rounded-md"
+                      style={{
+                        background: done ? habit.color + '20' : 'var(--surface-tertiary)',
+                        color: done ? habit.color : 'var(--text-tertiary)',
+                      }}
                     >
                       {log?.count ?? 0}/{habit.targetCount}×
-                    </span>
-                  )}
-                  {habit.reminderEnabled && habit.reminderTime && (
-                    <span className="text-[10px] font-semibold" style={{ color: 'var(--text-tertiary)' }}>
-                      🔔 {habit.reminderTime}
                     </span>
                   )}
                 </div>
 
                 {habit.description && (
-                  <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-tertiary)' }}>
+                  <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-tertiary)' }}>
                     {habit.description}
                   </p>
                 )}
               </div>
 
               {/* Right side actions */}
-              <div className="flex items-center gap-1 flex-shrink-0">
+              <div className="flex items-center gap-1.5 flex-shrink-0">
                 {showActions && (
                   <div className="relative">
                     <button
                       onClick={() => setMenuOpen(v => !v)}
-                      className="btn-ghost p-2 rounded-xl text-base leading-none"
+                      className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[var(--surface-secondary)] text-base transition-colors"
+                      style={{ color: 'var(--text-secondary)' }}
                       aria-label="Menu"
                     >⋯</button>
                     {menuOpen && (

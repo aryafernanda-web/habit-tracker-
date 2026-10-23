@@ -73,15 +73,24 @@ export async function saveHabit(habit: Habit): Promise<void> {
 
 export async function deleteHabit(id: string): Promise<void> {
   const db = await getDB()
-  const tx = db.transaction(['habits', 'logs'], 'readwrite')
-  await tx.objectStore('habits').delete(id)
-  // Delete associated logs
-  const logsIndex = tx.objectStore('logs').index('by-habit')
-  const logs = await logsIndex.getAllKeys(id)
-  for (const key of logs) {
-    await tx.objectStore('logs').delete(key)
+  try {
+    const tx = db.transaction(['habits', 'logs'], 'readwrite')
+    tx.objectStore('habits').delete(id)
+    // Delete associated logs
+    try {
+      const logsIndex = tx.objectStore('logs').index('by-habit')
+      const logs = await logsIndex.getAllKeys(id)
+      for (const key of logs) {
+        tx.objectStore('logs').delete(key)
+      }
+    } catch (e) {
+      console.warn('Could not delete logs by index:', e)
+    }
+    await tx.done
+  } catch (err) {
+    console.warn('deleteHabit transaction fallback:', err)
+    await db.delete('habits', id)
   }
-  await tx.done
 }
 
 // ─── Categories ────────────────────────────────────────────────────────────────

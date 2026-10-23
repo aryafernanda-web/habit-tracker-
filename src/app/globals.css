@@ -84,11 +84,12 @@ body {
 @keyframes checkPop    { 0% { transform: scale(0.5); opacity: 0; } 60% { transform: scale(1.2); } 100% { transform: scale(1); opacity: 1; } }
 @keyframes spin        { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-.animate-fade-in  { animation: fadeIn  0.25s ease-out; }
-.animate-slide-up { animation: slideUp 0.3s  ease-out; }
-.animate-scale-in { animation: scaleIn 0.25s ease-out; }
-.animate-pulse-soft { animation: pulse-soft 2.5s ease-in-out infinite; }
-.animate-spin     { animation: spin 1s linear infinite; }
+.animate-fade-in   { animation: fadeIn    0.25s ease-out; }
+.animate-slide-up  { animation: slideUp  0.3s  ease-out; }
+.animate-slide-down{ animation: slideDown 0.25s ease-out; }
+.animate-scale-in  { animation: scaleIn  0.25s ease-out; }
+.animate-pulse-soft{ animation: pulse-soft 2.5s ease-in-out infinite; }
+.animate-spin      { animation: spin 1s linear infinite; }
 
 /* ─── Component library ─────────────────────────────────────────────────────── */
 
@@ -278,18 +279,32 @@ body {
   /* ── Modal ──────────────────────────────────────────────────────────────── */
 
   .modal-overlay {
-    @apply fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4;
-    background: rgba(0,0,0,0.55);
-    backdrop-filter: blur(6px);
+    @apply fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     animation: fadeIn 0.2s ease-out;
   }
 
   .modal-box {
-    @apply w-full md:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl md:rounded-3xl;
+    @apply w-full md:max-w-lg rounded-t-3xl md:rounded-3xl flex flex-col;
+    max-height: 90dvh;
+    max-height: 90vh;
     background: var(--surface);
     border-top: 1px solid var(--border-solid);
     box-shadow: var(--shadow-xl);
     animation: slideUp 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    overflow: hidden;
+  }
+
+  /* Inner scrollable area */
+  .modal-box > form,
+  .modal-box > .modal-scroll,
+  .modal-scroll {
+    overflow-y: auto;
+    min-height: 0;
+    flex: 1;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* ── Tabs ───────────────────────────────────────────────────────────────── */

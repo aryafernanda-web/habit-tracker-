@@ -163,14 +163,26 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
     if (!h) return
     const updated = { ...h, archivedAt: new Date().toISOString() }
     await saveHabit(updated)
-    setHabits(prev => prev.map(x => x.id === id ? updated : x))
-  }, [habits])
+    setHabits(prev => {
+      const next = prev.map(x => x.id === id ? updated : x)
+      if (settings.notificationsEnabled && notificationsGranted()) {
+        scheduleReminders(next.filter(h => !h.archivedAt))
+      }
+      return next
+    })
+  }, [habits, settings.notificationsEnabled])
 
   const removeHabit = useCallback(async (id: string) => {
     await deleteHabit(id)
-    setHabits(prev => prev.filter(h => h.id !== id))
+    setHabits(prev => {
+      const next = prev.filter(h => h.id !== id)
+      if (settings.notificationsEnabled && notificationsGranted()) {
+        scheduleReminders(next.filter(h => !h.archivedAt))
+      }
+      return next
+    })
     setLogs(prev => prev.filter(l => l.habitId !== id))
-  }, [])
+  }, [settings.notificationsEnabled])
 
   const reorderHabits = useCallback(async (reordered: Habit[]) => {
     const updated = reordered.map((h, i) => ({ ...h, order: i }))

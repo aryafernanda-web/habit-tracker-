@@ -36,12 +36,20 @@ export default function TodayPage() {
     return map
   }, [logs, selectedDate])
 
-  // Hide completed if setting says so (only for today)
+  // Hide completed if setting says so (only for today), then sort by reminderTime
   const visibleHabits = useMemo(() => {
-    if (!isToday || settings.showCompletedHabits) return scheduledHabits
-    return scheduledHabits.filter(h => {
-      const log = logMap.get(h.id)
-      return !(log && log.count >= h.targetCount)
+    let list = scheduledHabits
+    if (isToday && !settings.showCompletedHabits) {
+      list = list.filter(h => {
+        const log = logMap.get(h.id)
+        return !(log && log.count >= h.targetCount)
+      })
+    }
+    // Sort by reminderTime ascending (habits without reminder go to bottom)
+    return [...list].sort((a, b) => {
+      const ta = a.reminderEnabled && a.reminderTime ? a.reminderTime : '99:99'
+      const tb = b.reminderEnabled && b.reminderTime ? b.reminderTime : '99:99'
+      return ta.localeCompare(tb)
     })
   }, [scheduledHabits, settings.showCompletedHabits, logMap, isToday])
 
@@ -324,7 +332,7 @@ export default function TodayPage() {
       )}
 
       {/* ── Completion celebration ─────────────────────────────────────── */}
-      {allDone && (
+      {allDone && !showForm && (
         <div
           className="glass-card p-5 text-center mt-5 animate-scale-in"
           style={{ borderColor: '#10b98155', background: 'rgba(16, 185, 129, 0.08)' }}
@@ -343,6 +351,7 @@ export default function TodayPage() {
         isOpen={showForm}
         onClose={() => { setShowForm(false); setEditHabit(null) }}
         editHabit={editHabit}
+        onDelete={removeHabit}
       />
     </div>
   )

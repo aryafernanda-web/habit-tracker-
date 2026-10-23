@@ -34,6 +34,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [settings.theme])
 
+  // Register Service Worker for Android PWA notifications
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(err => {
+        console.warn('PWA service worker registration notice:', err)
+      })
+    }
+  }, [])
+
   if (!mounted || isLoading) {
     return (
       <div className="flex items-center justify-center h-dvh" style={{ background: 'var(--surface)' }}>

@@ -46,27 +46,33 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
       role="dialog"
       aria-modal="true"
     >
-      <div className={`modal-box ${sizeClass} p-6`}>
-        {/* Drag handle for mobile */}
-        <div className="flex justify-center mb-4 md:hidden">
-          <div className="w-10 h-1 rounded-full" style={{ background: 'var(--border)' }} />
+      <div className={`modal-box ${sizeClass}`}>
+        {/* Sticky header inside modal */}
+        <div className="px-6 pt-5 flex-shrink-0">
+          {/* Drag handle for mobile */}
+          <div className="flex justify-center mb-3 md:hidden">
+            <div className="w-10 h-1 rounded-full opacity-60" style={{ background: 'var(--border)' }} />
+          </div>
+
+          {title && (
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold" style={{ color: 'var(--text)' }}>{title}</h2>
+              <button
+                onClick={onClose}
+                className="w-8 h-8 flex items-center justify-center rounded-xl transition-colors hover:bg-[var(--surface-tertiary)]"
+                style={{ color: 'var(--text-secondary)' }}
+                aria-label="Tutup"
+              >
+                ✕
+              </button>
+            </div>
+          )}
         </div>
 
-        {title && (
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-bold" style={{ color: 'var(--text)' }}>{title}</h2>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-xl transition-colors"
-              style={{ color: 'var(--text-secondary)' }}
-              aria-label="Tutup"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-
-        {children}
+        {/* Scrollable body */}
+        <div className="modal-scroll px-6 pb-8 min-h-0 flex-1">
+          {children}
+        </div>
       </div>
     </div>
   )

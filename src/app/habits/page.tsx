@@ -358,6 +358,7 @@ export default function HabitsPage() {
         isOpen={showForm}
         onClose={() => { setShowForm(false); setEditHabit(null) }}
         editHabit={editHabit}
+        onDelete={removeHabit}
       />
       <CategoryForm
         isOpen={catForm}

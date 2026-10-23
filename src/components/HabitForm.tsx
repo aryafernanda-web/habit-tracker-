@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Modal from './Modal'
+import Modal, { ConfirmDialog } from './Modal'
 import type { Habit } from '@/lib/types'
 import { useHabits } from '@/lib/context'
 import { generateId, validateHabitName } from '@/lib/utils'
@@ -23,6 +23,7 @@ interface HabitFormProps {
   isOpen: boolean
   onClose: () => void
   editHabit?: Habit | null
+  onDelete?: (habitId: string) => Promise<void> | void
 }
 
 const emptyForm = () => ({
@@ -35,44 +36,43 @@ const emptyForm = () => ({
   daysOfWeek: [1, 2, 3, 4, 5] as number[],
   intervalDays: 2,
   targetCount: 1,
-  reminderEnabled: false,
+  reminderEnabled: true,
   reminderTime: '08:00',
 })
 
-export default function HabitForm({ isOpen, onClose, editHabit }: HabitFormProps) {
-  const { addHabit, updateHabit, categories } = useHabits()
-  const [form,   setForm]   = useState(emptyForm())
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [saving, setSaving] = useState(false)
+export default function HabitForm({ isOpen, onClose, editHabit, onDelete }: HabitFormProps) {
+  const { addHabit, updateHabit, removeHabit, categories } = useHabits()
+  const [form,          setForm]          = useState(emptyForm())
+  const [errors,        setErrors]        = useState<Record<string, string>>({})
+  const [saving,        setSaving]        = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
       if (editHabit) {
         setForm({
-          name:            editHabit.name,
-          description:     editHabit.description ?? '',
-          categoryId:      editHabit.categoryId,
-          color:           editHabit.color,
-          icon:            editHabit.icon,
-          frequencyType:   editHabit.frequency.type,
-          daysOfWeek:      editHabit.frequency.daysOfWeek ?? [1, 2, 3, 4, 5],
-          intervalDays:    editHabit.frequency.intervalDays ?? 2,
-          targetCount:     editHabit.targetCount,
-          reminderEnabled: editHabit.reminderEnabled ?? false,
+          name:            editHabit.name || '',
+          description:     editHabit.description || '',
+          categoryId:      editHabit.categoryId || (categories[0]?.id ?? ''),
+          color:           editHabit.color || '#6366f1',
+          icon:            editHabit.icon || '⭐',
+          frequencyType:   editHabit.frequency?.type ?? 'daily',
+          daysOfWeek:      editHabit.frequency?.daysOfWeek ?? [1, 2, 3, 4, 5],
+          intervalDays:    editHabit.frequency?.intervalDays ?? 2,
+          targetCount:     editHabit.targetCount ?? 1,
+          reminderEnabled: editHabit.reminderEnabled ?? true,
           reminderTime:    editHabit.reminderTime ?? '08:00',
         })
       } else {
-        setForm(emptyForm())
+        setForm({
+          ...emptyForm(),
+          categoryId: categories[0]?.id ?? '',
+        })
       }
       setErrors({})
+      setConfirmDelete(false)
     }
-  }, [editHabit, isOpen])
-
-  useEffect(() => {
-    if (!form.categoryId && categories.length > 0) {
-      setForm(prev => ({ ...prev, categoryId: categories[0].id }))
-    }
-  }, [categories, form.categoryId])
+  }, [editHabit, isOpen, categories])
 
   function validate(): boolean {
     const e: Record<string, string> = {}
@@ -92,7 +92,7 @@ export default function HabitForm({ isOpen, onClose, editHabit }: HabitFormProps
     try {
       const habitData = {
         name:            form.name.trim(),
-        description:     form.description.trim() || undefined,
+        description:     form.description.trim() || '',
         categoryId:      form.categoryId,
         color:           form.color,
         icon:            form.icon,
@@ -101,15 +101,31 @@ export default function HabitForm({ isOpen, onClose, editHabit }: HabitFormProps
           ...(form.frequencyType === 'weekly' ? { daysOfWeek: form.daysOfWeek } : {}),
           ...(form.frequencyType === 'custom'  ? { intervalDays: form.intervalDays } : {}),
         },
-        targetCount:     form.targetCount,
-        reminderEnabled: form.reminderEnabled,
-        reminderTime:    form.reminderEnabled ? form.reminderTime : undefined,
+        targetCount:     Number(form.targetCount) || 1,
+        reminderEnabled: Boolean(form.reminderEnabled),
+        reminderTime:    form.reminderTime || '08:00',
       }
       if (editHabit) {
         await updateHabit({ ...editHabit, ...habitData })
       } else {
         await addHabit(habitData)
       }
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!editHabit) return
+    setSaving(true)
+    try {
+      if (onDelete) {
+        await onDelete(editHabit.id)
+      } else {
+        await removeHabit(editHabit.id)
+      }
+      setConfirmDelete(false)
       onClose()
     } finally {
       setSaving(false)
@@ -365,19 +381,46 @@ export default function HabitForm({ isOpen, onClose, editHabit }: HabitFormProps
         </div>
 
         {/* ── Actions ───────────────────────────────────────────────────── */}
-        <div className="flex gap-3 pt-1">
-          <button type="button" onClick={onClose} className="btn-secondary flex-1">
-            Batal
-          </button>
-          <button type="submit" className="btn-primary flex-1" disabled={saving}>
-            {saving ? (
-              <span className="flex items-center gap-2">
-                <span className="animate-spin text-xs">◌</span> Menyimpan…
-              </span>
-            ) : editHabit ? '✓ Simpan Perubahan' : '+ Tambah Kebiasaan'}
-          </button>
+        <div className="flex flex-col gap-3 pt-2">
+          <div className="flex gap-3">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1 py-3 text-sm">
+              Batal
+            </button>
+            <button type="submit" className="btn-primary flex-1 py-3 text-sm font-bold" disabled={saving}>
+              {saving ? (
+                <span className="flex items-center gap-2">
+                  <span className="animate-spin text-xs">◌</span> Menyimpan…
+                </span>
+              ) : editHabit ? '✓ Simpan Perubahan' : '+ Tambah Kebiasaan'}
+            </button>
+          </div>
+
+          {/* Delete button when editing */}
+          {editHabit && (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="w-full py-2.5 px-4 rounded-xl text-sm font-semibold text-red-500 hover:bg-red-500/10 transition-colors flex items-center justify-center gap-2 border border-red-500/25 mt-1"
+            >
+              🗑 Hapus Kebiasaan Ini
+            </button>
+          )}
         </div>
       </form>
+
+      {/* Confirmation Dialog for Delete from Form */}
+      {editHabit && (
+        <ConfirmDialog
+          isOpen={confirmDelete}
+          title="Hapus Kebiasaan?"
+          message={`"${editHabit.name}" dan riwayatnya akan dihapus permanen.`}
+          confirmLabel="Hapus Permanen"
+          cancelLabel="Batal"
+          danger
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </Modal>
   )
 }

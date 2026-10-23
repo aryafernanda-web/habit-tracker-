@@ -36,6 +36,23 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   }
 }
 
+async function getRegistrationSafe(): Promise<ServiceWorkerRegistration | null> {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return null
+  try {
+    const existing = await navigator.serviceWorker.getRegistration()
+    if (existing) return existing
+
+    const registered = await navigator.serviceWorker.register('/sw.js').catch(() => null)
+    if (registered) return registered
+
+    const readyPromise = navigator.serviceWorker.ready
+    const timeoutPromise = new Promise<null>(resolve => setTimeout(() => resolve(null), 1500))
+    return await Promise.race([readyPromise, timeoutPromise])
+  } catch {
+    return null
+  }
+}
+
 /**
  * Display a notification using Service Worker if available (required by Android Chrome),
  * or native Notification constructor as fallback.
@@ -56,10 +73,10 @@ export async function showNotification(
     silent: false,
   }
 
-  // 1. Try Service Worker registration first (standard for Android Chrome PWA)
+  // 1. Try Service Worker registration first (required for Android Chrome / PWA)
   if ('serviceWorker' in navigator) {
     try {
-      const reg = await navigator.serviceWorker.ready
+      const reg = await getRegistrationSafe()
       if (reg && reg.showNotification) {
         await reg.showNotification(title, {
           ...options,
@@ -73,14 +90,17 @@ export async function showNotification(
     }
   }
 
-  // 2. Fallback to standard window Notification constructor
+  // 2. Fallback to standard window Notification constructor (desktop browsers)
   try {
-    new Notification(title, options)
-    return true
+    if (typeof Notification !== 'undefined') {
+      new Notification(title, options)
+      return true
+    }
   } catch (nErr) {
     console.warn('Standard Notification constructor failed:', nErr)
-    return false
   }
+
+  return false
 }
 
 /** Send an immediate test notification for Android / browser verification */
@@ -143,8 +163,8 @@ function checkAndFireReminders(): void {
     const [hh, mm] = h.reminderTime.split(':').map(Number)
     const reminderMinutes = hh * 60 + mm
 
-    // If current time is at or within 60 minutes after the scheduled reminder time
-    if (currentMinutes >= reminderMinutes && currentMinutes <= reminderMinutes + 60) {
+    // If current time is within [reminderTime, reminderTime + 3 minutes] window
+    if (currentMinutes >= reminderMinutes && currentMinutes <= reminderMinutes + 3) {
       markFiredToday(h.id)
       showNotification(
         `⏰ Waktunya: ${h.icon} ${h.name}`,
@@ -163,9 +183,9 @@ export function scheduleReminders(habits: HabitReminderInfo[]): void {
 
   if (typeof window === 'undefined') return
 
-  // Start periodic polling every 30 seconds
+  // Start periodic polling every 60 seconds
   if (!intervalCheckId) {
-    intervalCheckId = setInterval(checkAndFireReminders, 30000)
+    intervalCheckId = setInterval(checkAndFireReminders, 60_000)
   }
 
   // Check immediately
