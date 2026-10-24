@@ -20,18 +20,26 @@ const STORAGE_KEY = 'habit_sync_config'
 /** Read stored sync settings */
 export function getSyncConfig(): SyncConfig {
   if (typeof window === 'undefined') {
-    return { roomCode: '', autoSync: false }
+    return { roomCode: '', autoSync: true }
   }
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      return {
+        roomCode: parsed.roomCode || '',
+        firebaseProjectId: parsed.firebaseProjectId || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
+        autoSync: parsed.autoSync !== undefined ? parsed.autoSync : true,
+        lastSyncedAt: parsed.lastSyncedAt,
+      }
+    }
   } catch {
     // fallback
   }
   return {
     roomCode: '',
     firebaseProjectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
-    autoSync: false,
+    autoSync: true,
   }
 }
 

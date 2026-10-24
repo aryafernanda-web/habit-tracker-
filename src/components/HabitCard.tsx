@@ -88,10 +88,13 @@ export default function HabitCard({
   return (
     <>
       <div
-        className="glass-card p-4 animate-fade-in transition-all duration-300"
+        className={`glass-card p-4 animate-fade-in transition-all duration-300 relative ${
+          menuOpen ? 'z-30' : 'z-0'
+        }`}
         style={{
           borderLeft: `3px solid ${habit.color}`,
           background: done ? bgColor : undefined,
+          zIndex: menuOpen ? 50 : 1,
         }}
       >
         <div className="flex items-center gap-3">
@@ -167,7 +170,7 @@ export default function HabitCard({
               {/* Right side actions */}
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 {showActions && (
-                  <div className="relative" ref={menuRef}>
+                  <div className="relative z-50" ref={menuRef}>
                     <button
                       onClick={() => setMenuOpen(v => !v)}
                       className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[var(--surface-secondary)] text-base transition-colors"
@@ -176,8 +179,12 @@ export default function HabitCard({
                     >⋯</button>
                     {menuOpen && (
                       <div
-                        className="absolute right-0 top-10 z-50 rounded-2xl shadow-2xl border overflow-hidden min-w-[180px] animate-slide-down"
-                        style={{ background: 'var(--surface)', borderColor: 'var(--border-solid)', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}
+                        className="absolute right-0 top-11 z-[100] rounded-2xl shadow-2xl border overflow-hidden min-w-[185px] animate-slide-down"
+                        style={{
+                          background: 'var(--surface)',
+                          borderColor: 'var(--border-solid)',
+                          boxShadow: '0 25px 60px rgba(0,0,0,0.5), 0 0 20px rgba(99,102,241,0.15)',
+                        }}
                       >
                         {onEdit && (
                           <button

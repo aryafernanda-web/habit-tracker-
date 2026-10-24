@@ -1,7 +1,7 @@
 'use client'
 
 import React, {
-  createContext, useContext, useEffect, useState, useCallback, useMemo
+  createContext, useContext, useEffect, useState, useCallback, useMemo, useRef
 } from 'react'
 import type { Habit, Category, HabitLog, AppSettings, Theme } from '@/lib/types'
 import {
@@ -19,7 +19,7 @@ import {
 } from '@/lib/notifications'
 import {
   getSyncConfig, saveSyncConfig, pushSyncData, pullSyncData,
-  decodeTransferData, SyncConfig, SyncPayload
+  decodeTransferData, SyncConfig
 } from '@/lib/sync'
 
 // ─── Context type ──────────────────────────────────────────────────────────────
@@ -65,7 +65,7 @@ interface HabitContextValue {
   enableNotifications: () => Promise<boolean>
   testNotification: () => Promise<boolean>
 
-  // Data management & Sync
+  // Data management & Cloud Sync
   exportData: () => Promise<{ habits: Habit[]; categories: Category[]; logs: HabitLog[] }>
   importData: (data: { habits: Habit[]; categories: Category[]; logs: HabitLog[] }) => Promise<void>
   pushToCloud: (customRoom?: string) => Promise<{ success: boolean; message: string }>
@@ -103,9 +103,14 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
   const [notifStatus, setNotifStatus] = useState<NotificationPermissionStatus>('default')
 
   // Sync state
-  const [syncConfig, setSyncConfigState] = useState<SyncConfig>({ roomCode: '', autoSync: false })
+  const [syncConfig, setSyncConfigState] = useState<SyncConfig>({ roomCode: '', autoSync: true })
   const [isSyncing, setIsSyncing] = useState(false)
   const [lastSyncMessage, setLastSyncMessage] = useState<string | null>(null)
+
+  // Auto-sync refs to track timestamps & active sync locks
+  const autoPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isPullingRef = useRef(false)
+  const lastPushedTimestampRef = useRef<string>('')
 
   // Derive todayLogs from all logs
   const today = todayStr()
@@ -130,6 +135,146 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       })
   }, [today])
 
+  // ── Sync Settings updater ───────────────────────────────────────────────────
+
+  const updateSyncConfig = useCallback((patch: Partial<SyncConfig>) => {
+    setSyncConfigState(prev => {
+      const next = { ...prev, ...patch }
+      saveSyncConfig(next)
+      return next
+    })
+  }, [])
+
+  // ── Explicit Cloud Push / Pull ──────────────────────────────────────────────
+
+  const pushToCloud = useCallback(async (customRoom?: string): Promise<{ success: boolean; message: string }> => {
+    const room = customRoom || syncConfig.roomCode
+    if (!room.trim()) {
+      return { success: false, message: 'Harap buat atau masukkan Kode Sinkronisasi.' }
+    }
+    setIsSyncing(true)
+    try {
+      const [curH, curC, curL] = await Promise.all([getAllHabits(), getAllCategories(), getAllLogs()])
+      const res = await pushSyncData(room, curH, curC, curL, syncConfig.firebaseProjectId)
+      if (res.success) {
+        lastPushedTimestampRef.current = new Date().toISOString()
+        const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+        updateSyncConfig({ roomCode: room, lastSyncedAt: now })
+      }
+      setLastSyncMessage(res.message)
+      return res
+    } finally {
+      setIsSyncing(false)
+    }
+  }, [syncConfig.roomCode, syncConfig.firebaseProjectId, updateSyncConfig])
+
+  const pullFromCloud = useCallback(async (customRoom?: string): Promise<{ success: boolean; message: string }> => {
+    const room = customRoom || syncConfig.roomCode
+    if (!room.trim()) {
+      return { success: false, message: 'Harap masukkan Kode Sinkronisasi yang sama dengan di laptop.' }
+    }
+    setIsSyncing(true)
+    try {
+      const res = await pullSyncData(room, syncConfig.firebaseProjectId)
+      if (res.success && res.data) {
+        lastPushedTimestampRef.current = res.data.timestamp || new Date().toISOString()
+        await importAllData(res.data.habits || [], res.data.categories || [], res.data.logs || [])
+        const [h, c, l] = await Promise.all([getAllHabits(), getAllCategories(), getAllLogs()])
+        const sorted = h.sort((a, b) => a.order - b.order)
+        setHabits(sorted)
+        setCategories(c)
+        setLogs(l)
+        const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+        updateSyncConfig({ roomCode: room, lastSyncedAt: now })
+        if (settings.notificationsEnabled && notificationsGranted()) {
+          scheduleReminders(getReminderList(sorted, l))
+        }
+      }
+      setLastSyncMessage(res.message)
+      return { success: res.success, message: res.message }
+    } finally {
+      setIsSyncing(false)
+    }
+  }, [syncConfig.roomCode, syncConfig.firebaseProjectId, updateSyncConfig, settings.notificationsEnabled, getReminderList])
+
+  // ── Debounced Auto-Push Engine ───────────────────────────────────────────────
+
+  const triggerAutoPush = useCallback(() => {
+    if (!syncConfig.roomCode || !syncConfig.autoSync) return
+    if (autoPushTimer.current) clearTimeout(autoPushTimer.current)
+
+    autoPushTimer.current = setTimeout(async () => {
+      try {
+        const [h, c, l] = await Promise.all([getAllHabits(), getAllCategories(), getAllLogs()])
+        const res = await pushSyncData(syncConfig.roomCode, h, c, l, syncConfig.firebaseProjectId)
+        if (res.success) {
+          lastPushedTimestampRef.current = new Date().toISOString()
+          const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+          updateSyncConfig({ lastSyncedAt: now })
+        }
+      } catch (err) {
+        console.warn('[AutoSync] Background push error:', err)
+      }
+    }, 1200)
+  }, [syncConfig.roomCode, syncConfig.autoSync, syncConfig.firebaseProjectId, updateSyncConfig])
+
+  // ── Auto-Pull Engine (Background Polling & Wakeup) ───────────────────────────
+
+  const triggerAutoPull = useCallback(async () => {
+    if (!syncConfig.roomCode || !syncConfig.autoSync || isPullingRef.current || isSyncing) return
+    isPullingRef.current = true
+    try {
+      const res = await pullSyncData(syncConfig.roomCode, syncConfig.firebaseProjectId)
+      if (res.success && res.data && res.data.timestamp) {
+        // If cloud data is newer than what we pushed or pulled locally
+        if (res.data.timestamp > (lastPushedTimestampRef.current || '')) {
+          lastPushedTimestampRef.current = res.data.timestamp
+          await importAllData(res.data.habits || [], res.data.categories || [], res.data.logs || [])
+          const [h, c, l] = await Promise.all([getAllHabits(), getAllCategories(), getAllLogs()])
+          const sorted = h.sort((a, b) => a.order - b.order)
+          setHabits(sorted)
+          setCategories(c)
+          setLogs(l)
+          const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+          updateSyncConfig({ lastSyncedAt: now })
+          if (settings.notificationsEnabled && notificationsGranted()) {
+            scheduleReminders(getReminderList(sorted, l))
+          }
+        }
+      }
+    } catch {
+      // Ignore background network hiccups
+    } finally {
+      isPullingRef.current = false
+    }
+  }, [syncConfig.roomCode, syncConfig.autoSync, syncConfig.firebaseProjectId, isSyncing, updateSyncConfig, settings.notificationsEnabled, getReminderList])
+
+  // Auto-pull background timer and visibility / focus hooks
+  useEffect(() => {
+    if (!syncConfig.roomCode || !syncConfig.autoSync) return
+
+    // 1. Initial pull
+    triggerAutoPull()
+
+    // 2. Interval polling every 10 seconds
+    const interval = setInterval(triggerAutoPull, 10_000)
+
+    // 3. Immediately pull whenever user switches back to the tab or unlocks phone
+    const handleFocus = () => triggerAutoPull()
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') triggerAutoPull()
+    }
+
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [syncConfig.roomCode, syncConfig.autoSync, triggerAutoPull])
+
   // ── Bootstrap ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -153,8 +298,13 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
         setSettings({ theme, weekStartsOnMonday: wsMon, showCompletedHabits: showDone, defaultView: defView, notificationsEnabled: notifEnabled })
         setNotifStatus(getNotificationPermission())
 
-        // Load sync config
-        const storedSync = getSyncConfig()
+        // Load sync config (generate friendly default code if empty)
+        let storedSync = getSyncConfig()
+        if (!storedSync.roomCode) {
+          const generatedRoom = 'habit-' + Math.random().toString(36).substring(2, 7)
+          storedSync = { ...storedSync, roomCode: generatedRoom, autoSync: true }
+          saveSyncConfig(storedSync)
+        }
         setSyncConfigState(storedSync)
 
         // Check URL for incoming transfer payload (?importSync=... or ?syncRoom=...)
@@ -163,8 +313,8 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
           const importSync = params.get('importSync')
           const roomParam = params.get('syncRoom')
 
-          if (roomParam && !storedSync.roomCode) {
-            const updated = { ...storedSync, roomCode: roomParam }
+          if (roomParam) {
+            const updated = { ...storedSync, roomCode: roomParam, autoSync: true }
             saveSyncConfig(updated)
             setSyncConfigState(updated)
           }
@@ -179,7 +329,6 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
               setCategories(reC)
               setLogs(reL)
               setLastSyncMessage(`🎉 Data berhasil disinkronkan (${decoded.habits.length} kebiasaan)!`)
-              // Clean URL
               window.history.replaceState({}, document.title, window.location.pathname)
             }
           }
@@ -213,7 +362,8 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       }
       return next
     })
-  }, [habits.length, settings.notificationsEnabled, getReminderList, logs])
+    triggerAutoPush()
+  }, [habits.length, settings.notificationsEnabled, getReminderList, logs, triggerAutoPush])
 
   const updateHabit = useCallback(async (habit: Habit) => {
     await saveHabit(habit)
@@ -224,7 +374,8 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       }
       return next
     })
-  }, [settings.notificationsEnabled, getReminderList, logs])
+    triggerAutoPush()
+  }, [settings.notificationsEnabled, getReminderList, logs, triggerAutoPush])
 
   const archiveHabit = useCallback(async (id: string) => {
     const h = habits.find(x => x.id === id)
@@ -238,7 +389,8 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       }
       return next
     })
-  }, [habits, settings.notificationsEnabled, getReminderList, logs])
+    triggerAutoPush()
+  }, [habits, settings.notificationsEnabled, getReminderList, logs, triggerAutoPush])
 
   const removeHabit = useCallback(async (id: string) => {
     await deleteHabit(id)
@@ -250,13 +402,15 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       return next
     })
     setLogs(prev => prev.filter(l => l.habitId !== id))
-  }, [settings.notificationsEnabled, getReminderList, logs])
+    triggerAutoPush()
+  }, [settings.notificationsEnabled, getReminderList, logs, triggerAutoPush])
 
   const reorderHabits = useCallback(async (reordered: Habit[]) => {
     const updated = reordered.map((h, i) => ({ ...h, order: i }))
     setHabits(updated)
     await Promise.all(updated.map(saveHabit))
-  }, [])
+    triggerAutoPush()
+  }, [triggerAutoPush])
 
   // ── Category CRUD ────────────────────────────────────────────────────────────
 
@@ -264,17 +418,20 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
     const cat: Category = { ...data, id: generateId(), isDefault: false }
     await saveCategory(cat)
     setCategories(prev => [...prev, cat])
-  }, [])
+    triggerAutoPush()
+  }, [triggerAutoPush])
 
   const updateCategory = useCallback(async (cat: Category) => {
     await saveCategory(cat)
     setCategories(prev => prev.map(c => c.id === cat.id ? cat : c))
-  }, [])
+    triggerAutoPush()
+  }, [triggerAutoPush])
 
   const removeCategory = useCallback(async (id: string) => {
     await deleteCategory(id)
     setCategories(prev => prev.filter(c => c.id !== id))
-  }, [])
+    triggerAutoPush()
+  }, [triggerAutoPush])
 
   // ── Log actions ──────────────────────────────────────────────────────────────
 
@@ -303,7 +460,8 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       }
       return next
     })
-  }, [habits, logs, settings.notificationsEnabled, getReminderList])
+    triggerAutoPush()
+  }, [habits, logs, settings.notificationsEnabled, getReminderList, triggerAutoPush])
 
   const incrementLog = useCallback(async (habitId: string, date: string) => {
     const habit = habits.find(h => h.id === habitId)
@@ -330,7 +488,8 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       }
       return next
     })
-  }, [habits, logs, settings.notificationsEnabled, getReminderList])
+    triggerAutoPush()
+  }, [habits, logs, settings.notificationsEnabled, getReminderList, triggerAutoPush])
 
   const refreshLogs = useCallback(async () => {
     const all = await getAllLogs()
@@ -379,7 +538,7 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
     return success
   }, [])
 
-  // ── Data management & Cloud Sync ─────────────────────────────────────────────
+  // ── Data management & Transfer ───────────────────────────────────────────────
 
   const exportData = useCallback(async () => {
     const [h, c, l] = await Promise.all([getAllHabits(), getAllCategories(), getAllLogs()])
@@ -396,63 +555,8 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
     if (settings.notificationsEnabled && notificationsGranted()) {
       scheduleReminders(getReminderList(sorted, l))
     }
-  }, [settings.notificationsEnabled, getReminderList])
-
-  const updateSyncConfig = useCallback((patch: Partial<SyncConfig>) => {
-    setSyncConfigState(prev => {
-      const next = { ...prev, ...patch }
-      saveSyncConfig(next)
-      return next
-    })
-  }, [])
-
-  const pushToCloud = useCallback(async (customRoom?: string): Promise<{ success: boolean; message: string }> => {
-    const room = customRoom || syncConfig.roomCode
-    if (!room.trim()) {
-      return { success: false, message: 'Harap buat atau masukkan Kode Sinkronisasi.' }
-    }
-    setIsSyncing(true)
-    try {
-      const [curH, curC, curL] = await Promise.all([getAllHabits(), getAllCategories(), getAllLogs()])
-      const res = await pushSyncData(room, curH, curC, curL, syncConfig.firebaseProjectId)
-      if (res.success) {
-        const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-        updateSyncConfig({ roomCode: room, lastSyncedAt: now })
-      }
-      setLastSyncMessage(res.message)
-      return res
-    } finally {
-      setIsSyncing(false)
-    }
-  }, [syncConfig.roomCode, syncConfig.firebaseProjectId, updateSyncConfig])
-
-  const pullFromCloud = useCallback(async (customRoom?: string): Promise<{ success: boolean; message: string }> => {
-    const room = customRoom || syncConfig.roomCode
-    if (!room.trim()) {
-      return { success: false, message: 'Harap masukkan Kode Sinkronisasi yang sama dengan di laptop.' }
-    }
-    setIsSyncing(true)
-    try {
-      const res = await pullSyncData(room, syncConfig.firebaseProjectId)
-      if (res.success && res.data) {
-        await importAllData(res.data.habits || [], res.data.categories || [], res.data.logs || [])
-        const [h, c, l] = await Promise.all([getAllHabits(), getAllCategories(), getAllLogs()])
-        const sorted = h.sort((a, b) => a.order - b.order)
-        setHabits(sorted)
-        setCategories(c)
-        setLogs(l)
-        const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-        updateSyncConfig({ roomCode: room, lastSyncedAt: now })
-        if (settings.notificationsEnabled && notificationsGranted()) {
-          scheduleReminders(getReminderList(sorted, l))
-        }
-      }
-      setLastSyncMessage(res.message)
-      return { success: res.success, message: res.message }
-    } finally {
-      setIsSyncing(false)
-    }
-  }, [syncConfig.roomCode, syncConfig.firebaseProjectId, updateSyncConfig, settings.notificationsEnabled, getReminderList])
+    triggerAutoPush()
+  }, [settings.notificationsEnabled, getReminderList, triggerAutoPush])
 
   const importFromTransfer = useCallback(async (encoded: string): Promise<{ success: boolean; message: string }> => {
     const decoded = decodeTransferData(encoded)
@@ -468,8 +572,9 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
     if (settings.notificationsEnabled && notificationsGranted()) {
       scheduleReminders(getReminderList(sorted, l))
     }
+    triggerAutoPush()
     return { success: true, message: `Berhasil mengimpor ${decoded.habits.length} kebiasaan!` }
-  }, [settings.notificationsEnabled, getReminderList])
+  }, [settings.notificationsEnabled, getReminderList, triggerAutoPush])
 
   // ── Context value ─────────────────────────────────────────────────────────────
 

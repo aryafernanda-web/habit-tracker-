@@ -93,29 +93,46 @@ export default function TodayPage() {
         <div
           className="mb-4 p-3.5 rounded-2xl flex items-center justify-between gap-3 animate-slide-down"
           style={{
-            background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.12))',
-            border: '1px solid rgba(99,102,241,0.25)',
+            background: notificationStatus === 'denied'
+              ? 'linear-gradient(135deg, rgba(239,68,68,0.12), rgba(220,38,38,0.12))'
+              : 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.12))',
+            border: notificationStatus === 'denied'
+              ? '1px solid rgba(239,68,68,0.3)'
+              : '1px solid rgba(99,102,241,0.25)',
           }}
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <span className="text-xl flex-shrink-0">🔔</span>
+            <span className="text-xl flex-shrink-0">{notificationStatus === 'denied' ? '🚫' : '🔔'}</span>
             <div className="min-w-0">
-              <p className="text-xs font-bold truncate" style={{ color: 'var(--text)' }}>
-                Aktifkan Pengingat Android
+              <p className="text-xs font-bold truncate" style={{ color: notificationStatus === 'denied' ? '#ef4444' : 'var(--text)' }}>
+                {notificationStatus === 'denied' ? 'Notifikasi Diblokir Sistem HP' : 'Aktifkan Pengingat Android'}
               </p>
               <p className="text-[11px] truncate opacity-70" style={{ color: 'var(--text-secondary)' }}>
-                Dapatkan notifikasi waktu habit di HP kamu
+                {notificationStatus === 'denied'
+                  ? 'Buka blokir di setelan Chrome/HP agar pengingat bunyi'
+                  : 'Dapatkan notifikasi waktu habit di HP kamu'}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={() => enableNotifications()}
-              className="text-xs font-bold px-3 py-1.5 rounded-xl text-white transition-transform active:scale-95"
-              style={{ background: 'var(--brand)' }}
-            >
-              Izinkan
-            </button>
+            {notificationStatus === 'denied' ? (
+              <a
+                href="/settings"
+                className="text-xs font-bold px-3 py-1.5 rounded-xl text-white transition-transform active:scale-95 flex items-center gap-1 shadow-sm"
+                style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)' }}
+              >
+                <span>🔓</span>
+                <span>Buka Blokir</span>
+              </a>
+            ) : (
+              <button
+                onClick={() => enableNotifications()}
+                className="text-xs font-bold px-3 py-1.5 rounded-xl text-white transition-transform active:scale-95"
+                style={{ background: 'var(--brand)' }}
+              >
+                Izinkan
+              </button>
+            )}
             <button
               onClick={() => setDismissNotifBanner(true)}
               className="text-xs opacity-50 hover:opacity-100 p-1"

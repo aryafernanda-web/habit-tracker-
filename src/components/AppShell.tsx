@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useHabits } from '@/lib/context'
+import InAppReminderBanner from '@/components/InAppReminderBanner'
 
 const NAV_ITEMS = [
   { href: '/',          label: 'Hari Ini', icon: '🏠' },
@@ -73,6 +74,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex flex-col min-h-dvh">
+      <InAppReminderBanner />
       <main className="flex-1">
         {children}
       </main>

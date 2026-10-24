@@ -8,6 +8,7 @@ import Modal, { ConfirmDialog } from '@/components/Modal'
 import { importAllData } from '@/lib/db'
 import { encodeDataForTransfer, getQRCodeUrl } from '@/lib/sync'
 import { getNotificationDiagnostic, NotificationDiagnostic } from '@/lib/notifications'
+import UnblockNotifModal from '@/components/UnblockNotifModal'
 
 type SettingSection = 'sync' | 'notifications' | 'appearance' | 'data' | 'about'
 
@@ -38,8 +39,9 @@ export default function SettingsPage() {
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null)
 
-  // Diagnostics state
+  // Diagnostics & unblock modal state
   const [diagnostics, setDiagnostics] = useState<NotificationDiagnostic | null>(null)
+  const [showUnblockModal, setShowUnblockModal] = useState(false)
 
   useEffect(() => {
     setRoomInput(syncConfig.roomCode || '')
@@ -271,9 +273,39 @@ export default function SettingsPage() {
               </span>
             </div>
 
-            <p className="text-xs mb-4" style={{ color: 'var(--text-secondary)' }}>
+            <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
               Cukup gunakan satu kode yang sama di Laptop dan HP kamu untuk mengunggah dan menarik data kapan saja.
             </p>
+
+            {/* Auto-Sync Toggle Card */}
+            <div
+              className="p-3.5 rounded-2xl border flex items-center justify-between mb-4"
+              style={{
+                background: syncConfig.autoSync ? 'rgba(16,185,129,0.08)' : 'var(--surface-tertiary)',
+                borderColor: syncConfig.autoSync ? 'rgba(16,185,129,0.3)' : 'var(--border-solid)',
+              }}
+            >
+              <div className="flex items-center gap-3 min-w-0 pr-2">
+                <span className="text-2xl flex-shrink-0">{syncConfig.autoSync ? '🟢' : '⚪'}</span>
+                <div className="min-w-0">
+                  <p className="font-bold text-xs" style={{ color: syncConfig.autoSync ? '#10b981' : 'var(--text)' }}>
+                    {syncConfig.autoSync ? 'Sinkronisasi Otomatis Aktif (Real-time)' : 'Sinkronisasi Otomatis Nonaktif'}
+                  </p>
+                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                    {syncConfig.autoSync
+                      ? 'Setiap centang atau kebiasaan baru di laptop otomatis masuk ke HP dalam hitungan detik!'
+                      : 'Nyalakan agar kebiasaan di laptop & HP tersambung otomatis.'}
+                  </p>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={syncConfig.autoSync}
+                onChange={(e) => updateSyncConfig({ autoSync: e.target.checked })}
+                className="w-5 h-5 accent-emerald-500 cursor-pointer flex-shrink-0"
+                aria-label="Saklar Sinkronisasi Otomatis"
+              />
+            </div>
 
             <div className="flex flex-col gap-3">
               <div>
@@ -437,6 +469,35 @@ export default function SettingsPage() {
       {/* ── Section: Notifications ───────────────────────────────────────── */}
       {activeSection === 'notifications' && (
         <div className="flex flex-col gap-4 animate-fade-in">
+          {/* Blocked Notification Alert Banner */}
+          {(notificationStatus === 'denied' || diagnostics?.permission === 'denied') && (
+            <div
+              className="p-4 rounded-2xl flex flex-col gap-3 animate-scale-in"
+              style={{
+                background: 'rgba(239,68,68,0.1)',
+                border: '1.5px solid rgba(239,68,68,0.35)',
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <span className="text-2xl flex-shrink-0">🚫</span>
+                <div>
+                  <p className="font-bold text-sm text-red-500">Notifikasi Diblokir oleh Sistem HP Kamu</p>
+                  <p className="text-xs text-red-400 mt-0.5 leading-relaxed">
+                    Sistem Android atau browser Chrome memblokir notifikasi untuk situs ini. Browser tidak bisa memunculkan jendela izin lagi sampai kamu membuka blokirnya.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowUnblockModal(true)}
+                className="btn-primary py-2.5 px-4 text-xs font-bold self-start flex items-center gap-2"
+                style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', boxShadow: '0 4px 15px rgba(239,68,68,0.4)' }}
+              >
+                <span>🔓</span>
+                <span>Buka Panduan Buka Blokir (1 Menit)</span>
+              </button>
+            </div>
+          )}
+
           {/* Main notification permission card */}
           <div className="glass-card p-5 flex flex-col gap-4">
             <div className="flex items-center justify-between">
@@ -468,6 +529,13 @@ export default function SettingsPage() {
                 <span className="badge text-xs" style={{ background: '#10b98120', color: '#10b981' }}>
                   ✓ Aktif
                 </span>
+              ) : notificationStatus === 'denied' ? (
+                <button
+                  onClick={() => setShowUnblockModal(true)}
+                  className="btn-danger py-1.5 px-3.5 text-xs font-bold"
+                >
+                  🔓 Buka Blokir
+                </button>
               ) : (
                 <button
                   onClick={() => enableNotifications()}
@@ -820,6 +888,12 @@ export default function SettingsPage() {
         message="Tindakan ini tidak dapat dibatalkan. Semua kebiasaan, kategori, dan log penyelesaian akan dihapus permanen dari browser ini."
         confirmLabel="Ya, Hapus Semua"
         danger
+      />
+
+      {/* Unblock Notification Modal */}
+      <UnblockNotifModal
+        isOpen={showUnblockModal}
+        onClose={() => setShowUnblockModal(false)}
       />
     </div>
   )
