@@ -13,12 +13,14 @@ export default function TodayPage() {
   const {
     habits, categories, logs, toggleHabitLog, incrementLog,
     removeHabit, archiveHabit, settings, notificationStatus, enableNotifications,
+    syncConfig, isSyncing, pushToCloud, pullFromCloud,
   } = useHabits()
 
   const [selectedDate, setSelectedDate] = useState(todayStr)
   const [showForm,     setShowForm]     = useState(false)
   const [editHabit,    setEditHabit]    = useState<(typeof habits)[0] | null>(null)
   const [dismissNotifBanner, setDismissNotifBanner] = useState(false)
+  const [syncNotice, setSyncNotice] = useState<string | null>(null)
 
   const isToday = selectedDate === todayStr()
 
@@ -139,13 +141,36 @@ export default function TodayPage() {
         <div className="relative">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 mb-0.5">
-                {format(parseISO(selectedDate), 'EEEE', { locale: localeId })}
-              </p>
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">
+                  {format(parseISO(selectedDate), 'EEEE', { locale: localeId })}
+                </p>
+                <button
+                  onClick={async () => {
+                    if (syncConfig.roomCode) {
+                      const res = await pushToCloud()
+                      setSyncNotice(res.message)
+                      setTimeout(() => setSyncNotice(null), 3500)
+                    } else {
+                      window.location.assign('/settings')
+                    }
+                  }}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 hover:bg-white/20 transition-all flex items-center gap-1 active:scale-95 text-white/90"
+                  title="Sinkronisasi Laptop & HP"
+                >
+                  <span>🔄</span>
+                  <span>{syncConfig.roomCode ? (isSyncing ? 'Sinkron…' : syncConfig.roomCode) : 'Sinkron HP'}</span>
+                </button>
+              </div>
               <h1 className="text-2xl font-black tracking-tight">{dayLabel}</h1>
               <p className="text-xs opacity-65 mt-0.5">
                 {format(parseISO(selectedDate), 'd MMMM yyyy', { locale: localeId })}
               </p>
+              {syncNotice && (
+                <p className="text-[11px] font-semibold text-emerald-300 mt-1 animate-scale-in">
+                  {syncNotice}
+                </p>
+              )}
             </div>
 
             <ProgressRing
