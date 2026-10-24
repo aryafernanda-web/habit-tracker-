@@ -93,28 +93,31 @@ export async function getSWReg(): Promise<ServiceWorkerRegistration | null> {
   if (_cachedReg && _cachedReg.active) return _cachedReg
 
   try {
-    // 1. First priority: navigator.serviceWorker.ready is the gold standard on Android Chrome
+    // 1. Check if active registration already exists
+    const existing = await navigator.serviceWorker.getRegistration()
+    if (existing && existing.active) {
+      _cachedReg = existing
+      return existing
+    }
+
+    // 2. Register explicitly if not found
+    if (!existing) {
+      await navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => null)
+    }
+
+    // 3. navigator.serviceWorker.ready is the gold standard on Android Chrome (wait up to 4s)
     const ready = await Promise.race([
       navigator.serviceWorker.ready,
-      new Promise<null>((r) => setTimeout(() => r(null), 1500)),
+      new Promise<null>((r) => setTimeout(() => r(null), 4000)),
     ])
     if (ready) {
       _cachedReg = ready
       return ready
     }
 
-    // 2. Check if active registration already exists
-    const existing = await navigator.serviceWorker.getRegistration()
     if (existing) {
       _cachedReg = existing
       return existing
-    }
-
-    // 3. Register explicitly if not found
-    const newReg = await navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => null)
-    if (newReg) {
-      _cachedReg = newReg
-      return newReg
     }
   } catch (e) {
     console.warn('[HabitNotif] SW registration error:', e)
@@ -132,12 +135,41 @@ export async function showNotification(
   body: string,
   icon = ICON
 ): Promise<boolean> {
-  if (!notificationsSupported()) return false
+  const result = await sendNotificationWithDetails(title, body, icon)
+  return result.success
+}
 
-  // If permission not yet granted, attempt requesting it
-  if (Notification.permission !== 'granted') {
-    const perm = await requestNotificationPermission()
-    if (perm !== 'granted') return false
+export interface NotificationResult {
+  success: boolean
+  permission: NotificationPermissionStatus
+  step: string
+  error?: string
+}
+
+export async function sendNotificationWithDetails(
+  title: string,
+  body: string,
+  icon = ICON
+): Promise<NotificationResult> {
+  if (!notificationsSupported()) {
+    return { success: false, permission: 'unsupported', step: 'support_check', error: 'Browser tidak mendukung Notification API.' }
+  }
+
+  // Check or request permission
+  let perm = getNotificationPermission()
+  if (perm !== 'granted') {
+    perm = await requestNotificationPermission()
+  }
+
+  if (perm !== 'granted') {
+    return {
+      success: false,
+      permission: perm,
+      step: 'permission_check',
+      error: perm === 'denied'
+        ? 'Izin notifikasi diblokir di sistem Android / Chrome. Buka panduan buka blokir!'
+        : 'Izin notifikasi belum disetujui (Default).',
+    }
   }
 
   // Play audio chime for audible feedback
@@ -157,17 +189,14 @@ export async function showNotification(
   const resolvedIcon = icon.startsWith('http') ? icon : (origin ? `${origin}${icon}` : icon)
   const resolvedBadge = BADGE.startsWith('http') ? BADGE : (origin ? `${origin}${BADGE}` : BADGE)
 
-  const options = {
+  // Standard, clean options compatible with all Android Chrome versions
+  const options: NotificationOptions = {
     body,
     icon: resolvedIcon,
     badge: resolvedBadge,
-    tag: `habit-${Date.now()}`,
-    renotify: true,
-    requireInteraction: false,
-    silent: false,
-    vibrate: [200, 100, 200, 100, 200],
+    tag: 'habit-reminder',
     data: { url: '/' },
-  } as NotificationOptions
+  }
 
   // ── Strategy A: Service Worker showNotification (Mandatory on Android Chrome & Pixel)
   if ('serviceWorker' in navigator) {
@@ -175,10 +204,30 @@ export async function showNotification(
       const reg = await getSWReg()
       if (reg && 'showNotification' in reg) {
         await reg.showNotification(title, options)
-        return true
+        return { success: true, permission: 'granted', step: 'sw_showNotification' }
       }
     } catch (swErr) {
       console.warn('[HabitNotif] SW showNotification failed, trying postMessage:', swErr)
+      // Attempt postMessage fallback
+      try {
+        if (navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'SHOW_NOTIFICATION',
+            title,
+            options,
+          })
+          return { success: true, permission: 'granted', step: 'sw_postMessage' }
+        }
+      } catch (pmErr) {
+        console.warn('[HabitNotif] SW postMessage failed:', pmErr)
+      }
+
+      return {
+        success: false,
+        permission: 'granted',
+        step: 'sw_showNotification',
+        error: swErr instanceof Error ? swErr.message : String(swErr),
+      }
     }
 
     // Try posting message to active controller
@@ -189,7 +238,7 @@ export async function showNotification(
           title,
           options,
         })
-        return true
+        return { success: true, permission: 'granted', step: 'sw_postMessage' }
       }
     } catch (pmErr) {
       console.warn('[HabitNotif] SW postMessage failed:', pmErr)
@@ -200,23 +249,26 @@ export async function showNotification(
   try {
     if (typeof Notification !== 'undefined') {
       new Notification(title, options)
-      return true
+      return { success: true, permission: 'granted', step: 'desktop_notification' }
     }
   } catch (constrErr) {
     console.warn('[HabitNotif] Notification constructor failed (expected on Android Chrome):', constrErr)
+    return {
+      success: false,
+      permission: 'granted',
+      step: 'desktop_constructor',
+      error: constrErr instanceof Error ? constrErr.message : String(constrErr),
+    }
   }
 
-  return false
+  return { success: false, permission: 'granted', step: 'unknown', error: 'Tidak dapat mengaktifkan Service Worker.' }
 }
 
-/** Send an immediate test notification with audible sound & vibration */
-export async function sendTestNotification(): Promise<boolean> {
-  const perm = await requestNotificationPermission()
-  if (perm !== 'granted') return false
-
-  return showNotification(
+/** Send an immediate test notification with detailed status */
+export async function sendTestNotification(): Promise<NotificationResult> {
+  return sendNotificationWithDetails(
     '⚡ Pengingat Habit Aktif!',
-    'Notifikasi berhasil diaktifkan! Pengingat kebiasaan akan muncul di HP dan browser kamu. 💪'
+    'Notifikasi berhasil diaktifkan! Pengingat kebiasaan akan muncul di HP Pixel dan browser kamu. 💪'
   )
 }
 

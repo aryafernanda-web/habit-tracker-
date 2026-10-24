@@ -93,8 +93,11 @@ export default function UnblockNotifModal({ isOpen, onClose }: UnblockNotifModal
                 <div>
                   <p className="font-bold text-white text-xs">Nyalakan Saklar Notifikasi &amp; Situs</p>
                   <p className="text-[11px] mt-0.5 text-gray-300">
-                    Ketuk menu <strong>Notifikasi (Notifications)</strong>. Pastikan saklar paling atas <strong>&quot;Semua notifikasi&quot;</strong> AKTIF. Lalu scroll ke bawah ke bagian <strong>Situs (Sites)</strong>, pastikan web Habit Tracker dalam posisi <strong>ON / Diizinkan</strong>.
+                    Ketuk menu <strong>Notifikasi (Notifications)</strong>. Pastikan saklar paling atas <strong>&quot;Semua notifikasi&quot; (All notifications)</strong> AKTIF (ON).
                   </p>
+                  <div className="mt-1.5 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300">
+                    ℹ️ <strong>Jika tertulis &quot;App has not posted any notifications&quot;:</strong> Itu wajar di Android Pixel! Tulisan itu artinya Android belum menerima notifikasi pertama dari web. Cukup pastikan saklar utama paling atas tetap <strong>ON</strong>, lalu ikuti Langkah 3 di bawah untuk mengizinkan situs di Chrome.
+                  </div>
                 </div>
               </div>
 

@@ -127,16 +127,12 @@ export default function SettingsPage() {
     setTestingNotif(true)
     setTestNotifMsg(null)
     try {
-      const ok = await testNotification()
+      const res = await testNotification()
       const diag = await getNotificationDiagnostic()
       setDiagnostics(diag)
-      if (ok) {
-        setTestNotifMsg('✅ Notifikasi terkirim dengan getar & suara! Cek bilah status HP / browser kamu.')
-      } else {
-        setTestNotifMsg('⚠️ Izin notifikasi belum diizinkan atau terblokir di sistem HP kamu.')
-      }
-    } catch {
-      setTestNotifMsg('❌ Terjadi kesalahan saat mengirim notifikasi.')
+      setTestNotifMsg(res.message)
+    } catch (err) {
+      setTestNotifMsg('❌ Terjadi kesalahan: ' + (err instanceof Error ? err.message : String(err)))
     } finally {
       setTestingNotif(false)
     }

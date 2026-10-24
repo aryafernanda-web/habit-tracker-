@@ -63,7 +63,7 @@ interface HabitContextValue {
 
   // Notifications
   enableNotifications: () => Promise<boolean>
-  testNotification: () => Promise<boolean>
+  testNotification: () => Promise<{ success: boolean; message: string }>
 
   // Data management & Cloud Sync
   exportData: () => Promise<{ habits: Habit[]; categories: Category[]; logs: HabitLog[] }>
@@ -532,10 +532,20 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
     return false
   }, [habits, logs, updateSettings, getReminderList])
 
-  const testNotification = useCallback(async (): Promise<boolean> => {
-    const success = await sendTestNotification()
+  const testNotification = useCallback(async (): Promise<{ success: boolean; message: string }> => {
+    const res = await sendTestNotification()
     setNotifStatus(getNotificationPermission())
-    return success
+    if (res.success) {
+      return {
+        success: true,
+        message: '✅ Notifikasi terkirim ke bilah status Android! Cek bagian atas layar HP kamu.',
+      }
+    } else {
+      return {
+        success: false,
+        message: res.error || `⚠️ Gagal: Status izin notifikasi adalah ${res.permission}. Buka panduan buka blokir.`,
+      }
+    }
   }, [])
 
   // ── Data management & Transfer ───────────────────────────────────────────────
