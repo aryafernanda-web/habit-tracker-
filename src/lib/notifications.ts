@@ -93,19 +93,30 @@ export async function getSWReg(): Promise<ServiceWorkerRegistration | null> {
   if (_cachedReg && _cachedReg.active) return _cachedReg
 
   try {
-    // 1. Check if active registration already exists
+    // 1. Check all registrations (look for any active registration)
+    const regs = await navigator.serviceWorker.getRegistrations()
+    for (const r of regs) {
+      if (r.active) {
+        _cachedReg = r
+        return r
+      }
+    }
+
+    // 2. Check default registration
     const existing = await navigator.serviceWorker.getRegistration()
-    if (existing && existing.active) {
+    if (existing) {
       _cachedReg = existing
       return existing
     }
 
-    // 2. Register explicitly if not found
-    if (!existing) {
-      await navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => null)
+    // 3. Register explicitly if not found
+    const newReg = await navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => null)
+    if (newReg) {
+      _cachedReg = newReg
+      return newReg
     }
 
-    // 3. navigator.serviceWorker.ready is the gold standard on Android Chrome (wait up to 4s)
+    // 4. Wait for navigator.serviceWorker.ready with a timeout (4s)
     const ready = await Promise.race([
       navigator.serviceWorker.ready,
       new Promise<null>((r) => setTimeout(() => r(null), 4000)),
@@ -113,11 +124,6 @@ export async function getSWReg(): Promise<ServiceWorkerRegistration | null> {
     if (ready) {
       _cachedReg = ready
       return ready
-    }
-
-    if (existing) {
-      _cachedReg = existing
-      return existing
     }
   } catch (e) {
     console.warn('[HabitNotif] SW registration error:', e)
@@ -198,6 +204,8 @@ export async function sendNotificationWithDetails(
     data: { url: '/' },
   }
 
+  const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '')
+
   // ── Strategy A: Service Worker showNotification (Mandatory on Android Chrome & Pixel)
   if ('serviceWorker' in navigator) {
     try {
@@ -245,23 +253,32 @@ export async function sendNotificationWithDetails(
     }
   }
 
-  // ── Strategy B: Web Notification constructor (Desktop Chrome, Firefox, Safari)
-  try {
-    if (typeof Notification !== 'undefined') {
-      new Notification(title, options)
-      return { success: true, permission: 'granted', step: 'desktop_notification' }
-    }
-  } catch (constrErr) {
-    console.warn('[HabitNotif] Notification constructor failed (expected on Android Chrome):', constrErr)
-    return {
-      success: false,
-      permission: 'granted',
-      step: 'desktop_constructor',
-      error: constrErr instanceof Error ? constrErr.message : String(constrErr),
+  // ── Strategy B: Web Notification constructor (Desktop ONLY - Never on Android Chrome)
+  if (!isAndroid) {
+    try {
+      if (typeof Notification !== 'undefined') {
+        new Notification(title, options)
+        return { success: true, permission: 'granted', step: 'desktop_notification' }
+      }
+    } catch (constrErr) {
+      console.warn('[HabitNotif] Notification constructor failed:', constrErr)
+      return {
+        success: false,
+        permission: 'granted',
+        step: 'desktop_constructor',
+        error: constrErr instanceof Error ? constrErr.message : String(constrErr),
+      }
     }
   }
 
-  return { success: false, permission: 'granted', step: 'unknown', error: 'Tidak dapat mengaktifkan Service Worker.' }
+  return {
+    success: false,
+    permission: 'granted',
+    step: 'unknown',
+    error: isAndroid
+      ? 'Service Worker belum siap di HP kamu. Silakan refresh / muat ulang halaman sekali lagi.'
+      : 'Tidak dapat menampilkan notifikasi pada browser ini.',
+  }
 }
 
 /** Send an immediate test notification with detailed status */
