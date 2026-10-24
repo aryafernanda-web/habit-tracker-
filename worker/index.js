@@ -1,5 +1,13 @@
 // worker/index.js - custom worker logic bundled by next-pwa
 
+self.addEventListener('install', () => {
+  self.skipWaiting()
+})
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(clients.claim())
+})
+
 self.addEventListener('message', (event) => {
   if (!event.data) return
 

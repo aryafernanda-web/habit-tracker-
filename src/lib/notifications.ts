@@ -93,7 +93,7 @@ export async function getSWReg(): Promise<ServiceWorkerRegistration | null> {
   if (_cachedReg && _cachedReg.active) return _cachedReg
 
   try {
-    // 1. Check all registrations (look for any active registration)
+    // 1. Check all registrations for an active worker
     const regs = await navigator.serviceWorker.getRegistrations()
     for (const r of regs) {
       if (r.active) {
@@ -102,29 +102,60 @@ export async function getSWReg(): Promise<ServiceWorkerRegistration | null> {
       }
     }
 
-    // 2. Check default registration
-    const existing = await navigator.serviceWorker.getRegistration()
-    if (existing) {
-      _cachedReg = existing
-      return existing
+    // 2. Try getting or registering
+    let reg: ServiceWorkerRegistration | undefined | null = await navigator.serviceWorker.getRegistration()
+    if (!reg) {
+      reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => null)
     }
 
-    // 3. Register explicitly if not found
-    const newReg = await navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => null)
-    if (newReg) {
-      _cachedReg = newReg
-      return newReg
+    if (reg && reg.active) {
+      _cachedReg = reg
+      return reg
     }
 
-    // 4. Wait for navigator.serviceWorker.ready with a timeout (4s)
+    // 3. If installing or waiting, wait for statechange to activated
+    if (reg) {
+      const worker = reg.installing || reg.waiting
+      if (worker) {
+        await new Promise<void>((resolve) => {
+          const handler = () => {
+            if (worker.state === 'activated' || worker.state === 'redundant') {
+              worker.removeEventListener('statechange', handler)
+              resolve()
+            }
+          }
+          worker.addEventListener('statechange', handler)
+          setTimeout(resolve, 3000)
+        })
+
+        if (reg.active) {
+          _cachedReg = reg
+          return reg
+        }
+      }
+    }
+
+    // 4. Wait for navigator.serviceWorker.ready (W3C standard guarantee that active exists)
     const ready = await Promise.race([
       navigator.serviceWorker.ready,
-      new Promise<null>((r) => setTimeout(() => r(null), 4000)),
+      new Promise<null>((r) => setTimeout(() => r(null), 5000)),
     ])
-    if (ready) {
+    if (ready && ready.active) {
       _cachedReg = ready
       return ready
     }
+
+    // 5. Final check across registrations
+    const finalRegs = await navigator.serviceWorker.getRegistrations()
+    for (const r of finalRegs) {
+      if (r.active) {
+        _cachedReg = r
+        return r
+      }
+    }
+
+    if (ready) return ready
+    if (reg) return reg
   } catch (e) {
     console.warn('[HabitNotif] SW registration error:', e)
   }
@@ -209,8 +240,37 @@ export async function sendNotificationWithDetails(
   // ── Strategy A: Service Worker showNotification (Mandatory on Android Chrome & Pixel)
   if ('serviceWorker' in navigator) {
     try {
-      const reg = await getSWReg()
-      if (reg && 'showNotification' in reg) {
+      let reg = await getSWReg()
+
+      // Ensure reg.active is ready before calling showNotification
+      if (reg && !reg.active) {
+        const ready = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise<null>((r) => setTimeout(() => r(null), 3500)),
+        ])
+        if (ready?.active) {
+          reg = ready
+        }
+      }
+
+      if (reg && reg.active) {
+        await reg.showNotification(title, options)
+        return { success: true, permission: 'granted', step: 'sw_showNotification' }
+      }
+
+      // If active worker isn't exposed yet, try controller postMessage
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'SHOW_NOTIFICATION',
+          title,
+          options,
+        })
+        return { success: true, permission: 'granted', step: 'sw_postMessage' }
+      }
+
+      // If still not active, wait a brief tick and call showNotification directly
+      if (reg) {
+        await new Promise((r) => setTimeout(r, 600))
         await reg.showNotification(title, options)
         return { success: true, permission: 'granted', step: 'sw_showNotification' }
       }
@@ -237,20 +297,6 @@ export async function sendNotificationWithDetails(
         error: swErr instanceof Error ? swErr.message : String(swErr),
       }
     }
-
-    // Try posting message to active controller
-    try {
-      if (navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'SHOW_NOTIFICATION',
-          title,
-          options,
-        })
-        return { success: true, permission: 'granted', step: 'sw_postMessage' }
-      }
-    } catch (pmErr) {
-      console.warn('[HabitNotif] SW postMessage failed:', pmErr)
-    }
   }
 
   // ── Strategy B: Web Notification constructor (Desktop ONLY - Never on Android Chrome)
@@ -276,7 +322,7 @@ export async function sendNotificationWithDetails(
     permission: 'granted',
     step: 'unknown',
     error: isAndroid
-      ? 'Service Worker belum siap di HP kamu. Silakan refresh / muat ulang halaman sekali lagi.'
+      ? 'Service Worker sedang diaktifkan. Silakan muat ulang (refresh) halaman lalu coba lagi.'
       : 'Tidak dapat menampilkan notifikasi pada browser ini.',
   }
 }
