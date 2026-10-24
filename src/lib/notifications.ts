@@ -237,28 +237,18 @@ export async function sendNotificationWithDetails(
 
   const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '')
 
-  // ── Strategy A: Service Worker showNotification (Mandatory on Android Chrome & Pixel)
+  // ── Strategy A: Try Service Worker showNotification ONLY if worker is actually active
   if ('serviceWorker' in navigator) {
     try {
-      let reg = await getSWReg()
+      const reg = await getSWReg()
 
-      // Ensure reg.active is ready before calling showNotification
-      if (reg && !reg.active) {
-        const ready = await Promise.race([
-          navigator.serviceWorker.ready,
-          new Promise<null>((r) => setTimeout(() => r(null), 3500)),
-        ])
-        if (ready?.active) {
-          reg = ready
-        }
-      }
-
-      if (reg && reg.active) {
+      // Only call showNotification if reg.active is explicitly non-null (prevents Chromium TypeError)
+      if (reg?.active) {
         await reg.showNotification(title, options)
         return { success: true, permission: 'granted', step: 'sw_showNotification' }
       }
 
-      // If active worker isn't exposed yet, try controller postMessage
+      // If active controller is available, post message
       if (navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({
           type: 'SHOW_NOTIFICATION',
@@ -268,38 +258,23 @@ export async function sendNotificationWithDetails(
         return { success: true, permission: 'granted', step: 'sw_postMessage' }
       }
 
-      // If still not active, wait a brief tick and call showNotification directly
-      if (reg) {
-        await new Promise((r) => setTimeout(r, 600))
-        await reg.showNotification(title, options)
-        return { success: true, permission: 'granted', step: 'sw_showNotification' }
+      // On Android, wait briefly for ready state if not active yet
+      if (isAndroid) {
+        const ready = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise<null>((r) => setTimeout(() => r(null), 2500)),
+        ])
+        if (ready?.active) {
+          await ready.showNotification(title, options)
+          return { success: true, permission: 'granted', step: 'sw_showNotification' }
+        }
       }
     } catch (swErr) {
-      console.warn('[HabitNotif] SW showNotification failed, trying postMessage:', swErr)
-      // Attempt postMessage fallback
-      try {
-        if (navigator.serviceWorker.controller) {
-          navigator.serviceWorker.controller.postMessage({
-            type: 'SHOW_NOTIFICATION',
-            title,
-            options,
-          })
-          return { success: true, permission: 'granted', step: 'sw_postMessage' }
-        }
-      } catch (pmErr) {
-        console.warn('[HabitNotif] SW postMessage failed:', pmErr)
-      }
-
-      return {
-        success: false,
-        permission: 'granted',
-        step: 'sw_showNotification',
-        error: swErr instanceof Error ? swErr.message : String(swErr),
-      }
+      console.warn('[HabitNotif] SW showNotification error:', swErr)
     }
   }
 
-  // ── Strategy B: Web Notification constructor (Desktop ONLY - Never on Android Chrome)
+  // ── Strategy B: Native Web Notification constructor (Desktop browsers - works without Service Worker)
   if (!isAndroid) {
     try {
       if (typeof Notification !== 'undefined') {
@@ -317,13 +292,21 @@ export async function sendNotificationWithDetails(
     }
   }
 
+  // If on Android and service worker is still transitioning to active
+  if (isAndroid) {
+    return {
+      success: false,
+      permission: 'granted',
+      step: 'sw_waiting',
+      error: 'Service Worker sedang dimuat di latar belakang. Silakan muat ulang (refresh) halaman lalu tekan tombol tes sekali lagi!',
+    }
+  }
+
   return {
     success: false,
     permission: 'granted',
     step: 'unknown',
-    error: isAndroid
-      ? 'Service Worker sedang diaktifkan. Silakan muat ulang (refresh) halaman lalu coba lagi.'
-      : 'Tidak dapat menampilkan notifikasi pada browser ini.',
+    error: 'Tidak dapat menampilkan notifikasi pada browser ini.',
   }
 }
 
