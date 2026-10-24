@@ -226,14 +226,15 @@ export async function sendNotificationWithDetails(
   const resolvedIcon = icon.startsWith('http') ? icon : (origin ? `${origin}${icon}` : icon)
   const resolvedBadge = BADGE.startsWith('http') ? BADGE : (origin ? `${origin}${BADGE}` : BADGE)
 
-  // Standard, clean options compatible with all Android Chrome versions
-  const options: NotificationOptions = {
+  // Standard, clean options compatible with all Android Chrome versions with vibration priority
+  const options = {
     body,
     icon: resolvedIcon,
     badge: resolvedBadge,
-    tag: 'habit-reminder',
+    tag: `habit-${Date.now()}`,
+    vibrate: [300, 100, 300, 100, 400],
     data: { url: '/' },
-  }
+  } as NotificationOptions
 
   const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '')
 
