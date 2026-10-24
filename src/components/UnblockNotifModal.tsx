@@ -1,125 +1,246 @@
 'use client'
 
+import { useState } from 'react'
 import Modal from './Modal'
+import { playReminderChime } from '@/lib/notifications'
 
 interface UnblockNotifModalProps {
   isOpen: boolean
   onClose: () => void
 }
 
+type GuideTab = 'reset' | 'xiaomi' | 'samsung' | 'oppo' | 'fallback'
+
 export default function UnblockNotifModal({ isOpen, onClose }: UnblockNotifModalProps) {
+  const [activeTab, setActiveTab] = useState<GuideTab>('reset')
+  const [soundTested, setSoundTested] = useState(false)
+
+  const handleTestSound = () => {
+    playReminderChime()
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate([200, 100, 200, 100, 300])
+    }
+    setSoundTested(true)
+    setTimeout(() => setSoundTested(false), 3000)
+  }
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="🔓 Cara Buka Blokir Notifikasi di HP">
+    <Modal isOpen={isOpen} onClose={onClose} title="🔓 Panduan Buka Blokir Notifikasi HP" size="lg">
       <div className="flex flex-col gap-4 text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+        {/* Warning card */}
         <div
           className="p-3.5 rounded-2xl flex items-start gap-3"
-          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}
+          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}
         >
           <span className="text-2xl flex-shrink-0">⚠️</span>
           <div>
-            <p className="font-bold text-sm text-red-500">Notifikasi Diblokir oleh Sistem Android</p>
+            <p className="font-bold text-sm text-red-500">Kenapa Tertulis &quot;Tetap Terblokir&quot;?</p>
             <p className="text-[11px] mt-0.5 text-red-400">
-              Browser tidak diizinkan menampilkan jendela izin lagi sampai kamu membuka blokir di setelan browser atau HP. Ikuti salah satu cara cepat di bawah:
+              Di HP Android, jika notifikasi pernah tertekan &quot;Blokir&quot; atau dinonaktifkan di sistem HP, tombol izin di browser akan terkunci. Pilih panduan di bawah sesuai merek HP kamu:
             </p>
           </div>
         </div>
 
-        {/* Step-by-step Chrome Android */}
-        <div className="glass-card p-4 rounded-2xl flex flex-col gap-2.5">
-          <p className="font-bold text-sm" style={{ color: 'var(--text)' }}>
-            🌐 Cara 1: Buka Blokir Lewat Browser Chrome (Paling Cepat)
-          </p>
-
-          <div className="flex items-start gap-2.5">
-            <span className="w-5 h-5 rounded-full bg-[var(--brand)] text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">
-              1
-            </span>
-            <div>
-              Di bilah atas Chrome (di samping kiri alamat web), ketuk ikon <strong>🔒 (Gembok)</strong> atau ikon <strong>🎛️ (Garis Pengaturan Situs)</strong>.
-            </div>
-          </div>
-
-          <div className="flex items-start gap-2.5">
-            <span className="w-5 h-5 rounded-full bg-[var(--brand)] text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">
-              2
-            </span>
-            <div>
-              Ketuk menu <strong>&quot;Izin&quot; (Permissions)</strong> atau <strong>&quot;Setelan Situs&quot;</strong>.
-            </div>
-          </div>
-
-          <div className="flex items-start gap-2.5">
-            <span className="w-5 h-5 rounded-full bg-[var(--brand)] text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">
-              3
-            </span>
-            <div>
-              Ketuk <strong>&quot;Notifikasi&quot;</strong> lalu ubah dari <em>&quot;Diblokir&quot;</em> menjadi <strong>&quot;Izinkan&quot; (Allow)</strong>.
-            </div>
-          </div>
-
-          <div className="flex items-start gap-2.5">
-            <span className="w-5 h-5 rounded-full bg-[var(--brand)] text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">
-              4
-            </span>
-            <div>
-              Muat ulang (refresh) halaman web ini. Notifikasi kamu kini aktif!
-            </div>
-          </div>
+        {/* Brand tabs */}
+        <div className="tab-bar overflow-x-auto py-1">
+          {[
+            { id: 'reset',   label: '⚡ Cara Paling Ampuh (Reset Izin)', icon: '🔄' },
+            { id: 'xiaomi',  label: 'Xiaomi / Redmi / POCO',          icon: '📱' },
+            { id: 'samsung', label: 'Samsung Galaxy',                  icon: '📱' },
+            { id: 'oppo',    label: 'Oppo / Realme / Vivo',            icon: '📱' },
+            { id: 'fallback',label: '🔊 Alarm Suara (Tanpa Izin HP)',   icon: '🔔' },
+          ].map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id as GuideTab)}
+              className={`tab-item text-xs whitespace-nowrap ${activeTab === t.id ? 'active' : ''}`}
+            >
+              <span>{t.icon}</span>
+              <span>{t.label}</span>
+            </button>
+          ))}
         </div>
 
-        {/* Step-by-step Android OS Settings */}
-        <div className="glass-card p-4 rounded-2xl flex flex-col gap-2.5">
-          <p className="font-bold text-sm" style={{ color: 'var(--text)' }}>
-            📱 Cara 2: Lewat Pengaturan Sistem HP Android
-          </p>
+        {/* ── Tab: Reset Izin Chrome (Most Effective) ── */}
+        {activeTab === 'reset' && (
+          <div className="glass-card p-4 rounded-2xl flex flex-col gap-3 animate-fade-in">
+            <p className="font-bold text-sm" style={{ color: 'var(--brand)' }}>
+              🎯 Trik 1-Klik: Reset Izin Situs di Chrome Android
+            </p>
+            <p className="text-xs">
+              Cara ini akan menghapus riwayat blokir di Chrome sehingga jendela permintaan izin muncul kembali seperti baru:
+            </p>
 
-          <div className="flex items-start gap-2.5">
-            <span className="w-5 h-5 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">
-              1
-            </span>
-            <div>
-              Buka <strong>Pengaturan HP (Settings)</strong> &gt; pilih menu <strong>Aplikasi (Apps)</strong>.
+            <div className="flex flex-col gap-2.5">
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-[var(--brand)] text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">1</span>
+                <div>
+                  Lihat ke bilah alamat atas browser Chrome (di samping kiri tulisan <code>https://...</code>). Ketuk ikon <strong>🔒 (Gembok)</strong> atau ikon <strong>🎛️ (Garis Pengaturan)</strong>.
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-[var(--brand)] text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">2</span>
+                <div>
+                  Ketuk <strong>&quot;Setelan situs&quot; (Site settings)</strong> atau <strong>&quot;Izin&quot;</strong>.
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-[var(--brand)] text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">3</span>
+                <div>
+                  Ketuk tombol <strong>&quot;Hapus data &amp; reset izin&quot; (Clear &amp; Reset)</strong> berwarna biru/abu-abu.
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-[var(--brand)] text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">4</span>
+                <div>
+                  Tutup jendela tersebut lalu muat ulang halaman. Saat tombol <em>&quot;Izinkan Notifikasi&quot;</em> ditekan, popup izin dari Chrome akan muncul kembali!
+                </div>
+              </div>
             </div>
           </div>
+        )}
 
-          <div className="flex items-start gap-2.5">
-            <span className="w-5 h-5 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">
-              2
-            </span>
-            <div>
-              Cari aplikasi <strong>Chrome</strong> (atau <strong>Habit Tracker</strong> jika sudah ditambahkan ke Layar Utama).
+        {/* ── Tab: Xiaomi / Redmi / POCO ── */}
+        {activeTab === 'xiaomi' && (
+          <div className="glass-card p-4 rounded-2xl flex flex-col gap-3 animate-fade-in">
+            <p className="font-bold text-sm text-amber-500">
+              📱 Khusus HP Xiaomi / Redmi / POCO (MIUI &amp; HyperOS)
+            </p>
+            <p className="text-xs">
+              MIUI/HyperOS memiliki perlindungan ketat yang sering mematikan notifikasi Chrome secara sistem:
+            </p>
+
+            <div className="flex flex-col gap-2.5">
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">1</span>
+                <div>
+                  Buka <strong>Setelan HP (Settings)</strong> &gt; pilih <strong>Aplikasi</strong> &gt; <strong>Kelola Aplikasi</strong>.
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">2</span>
+                <div>
+                  Cari dan ketuk aplikasi <strong>Chrome</strong>.
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">3</span>
+                <div>
+                  Ketuk <strong>Notifikasi</strong> &gt; Pastikan <strong>&quot;Tampilkan notifikasi&quot;</strong> dan <strong>&quot;Notifikasi mengambang&quot;</strong> AKTIF (berwarna biru).
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">4</span>
+                <div>
+                  Scroll ke bawah pada menu yang sama &gt; cari <strong>Penghemat Baterai</strong> &gt; ubah menjadi <strong>&quot;Tidak ada batasan&quot; (No restrictions)</strong> agar pengingat jam tidak dimatikan saat HP tidur.
+                </div>
+              </div>
             </div>
           </div>
+        )}
 
-          <div className="flex items-start gap-2.5">
-            <span className="w-5 h-5 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">
-              3
-            </span>
-            <div>
-              Ketuk menu <strong>Notifikasi</strong> &gt; nyalakan saklar <strong>&quot;Izinkan Notifikasi&quot;</strong>.
+        {/* ── Tab: Samsung Galaxy ── */}
+        {activeTab === 'samsung' && (
+          <div className="glass-card p-4 rounded-2xl flex flex-col gap-3 animate-fade-in">
+            <p className="font-bold text-sm text-blue-500">
+              📱 Khusus HP Samsung Galaxy (One UI)
+            </p>
+
+            <div className="flex flex-col gap-2.5">
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">1</span>
+                <div>
+                  Buka <strong>Pengaturan HP</strong> &gt; pilih menu <strong>Aplikasi (Apps)</strong>.
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">2</span>
+                <div>
+                  Cari aplikasi <strong>Chrome</strong> (atau <em>Habit Tracker</em> jika sudah di-install).
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">3</span>
+                <div>
+                  Ketuk <strong>Pemberitahuan (Notifications)</strong> &gt; nyalakan <strong>&quot;Izinkan pemberitahuan&quot;</strong>.
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">4</span>
+                <div>
+                  Ketuk <strong>Kategori notifikasi</strong> &gt; pastikan kategori <strong>Situs Web</strong> aktif dan tidak dalam keadaan dibisukan.
+                </div>
+              </div>
             </div>
           </div>
+        )}
 
-          <div className="flex items-start gap-2.5">
-            <span className="w-5 h-5 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">
-              4
-            </span>
-            <div>
-              Buka kembali aplikasi ini dan lakukan uji coba notifikasi.
+        {/* ── Tab: Oppo / Realme / Vivo ── */}
+        {activeTab === 'oppo' && (
+          <div className="glass-card p-4 rounded-2xl flex flex-col gap-3 animate-fade-in">
+            <p className="font-bold text-sm text-emerald-500">
+              📱 Khusus HP Oppo, Realme, dan Vivo (ColorOS / Funtouch)
+            </p>
+
+            <div className="flex flex-col gap-2.5">
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">1</span>
+                <div>
+                  Buka <strong>Pengaturan</strong> &gt; pilih <strong>Manajemen Aplikasi</strong> &gt; <strong>Daftar Aplikasi</strong>.
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">2</span>
+                <div>
+                  Pilih aplikasi <strong>Chrome</strong> &gt; ketuk <strong>Kelola Notifikasi</strong>.
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0">3</span>
+                <div>
+                  Nyalakan saklar <strong>&quot;Izinkan Notifikasi&quot;</strong>, serta aktifkan centang <strong>Spanduk (Banner)</strong> dan <strong>Layar Kunci</strong>.
+                </div>
+              </div>
             </div>
           </div>
+        )}
+
+        {/* ── Tab: In-App Sound Alarm Fallback (Works 100%) ── */}
+        {activeTab === 'fallback' && (
+          <div className="glass-card p-4 rounded-2xl flex flex-col gap-3 animate-fade-in">
+            <p className="font-bold text-sm text-indigo-400">
+              🔊 Solusi Pasti Masuk: Alarm Suara &amp; Getar Dalam Aplikasi
+            </p>
+            <p className="text-xs">
+              Jika sistem HP kamu sangat ketat dan tidak mengizinkan notifikasi push eksternal, <strong>kamu tidak perlu khawatir!</strong>
+            </p>
+            <p className="text-xs leading-relaxed">
+              Aplikasi ini sudah dilengkapi dengan <strong>Sistem Alarm Audio &amp; Banner Mengambang Otomatis</strong>:
+            </p>
+
+            <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs">
+              <ul className="list-disc list-inside flex flex-col gap-1.5">
+                <li>Saat jam kebiasaan tiba (misal: <em>03:00 Bangun Pagi</em> atau <em>03:15 Sholat Tahajud</em>), aplikasi akan langsung memunculkan kartu pengingat di layar atas.</li>
+                <li>Aplikasi memainkan <strong>nada dering ramah bersuara dan getaran</strong>.</li>
+                <li>Fitur ini <strong>100% TIDAK BISA DIBLOKIR SISTEM HP</strong> karena berjalan langsung di dalam aplikasi web.</li>
+              </ul>
+            </div>
+
+            <button
+              onClick={handleTestSound}
+              className="btn-primary py-2.5 px-4 text-xs font-bold justify-center flex items-center gap-2 mt-1"
+            >
+              <span>🔊</span>
+              <span>{soundTested ? '✅ Suara & Getar Sedang Berbunyi!' : 'Uji Coba Suara & Getar Sekarang'}</span>
+            </button>
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-2 border-t border-[var(--border-solid)]">
+          <button onClick={onClose} className="btn-secondary w-full justify-center py-2.5 font-bold">
+            Tutup Panduan
+          </button>
         </div>
-
-        {/* In-app fallback note */}
-        <div className="p-3 rounded-xl" style={{ background: 'var(--surface-tertiary)' }}>
-          <p className="text-[11px] font-medium" style={{ color: 'var(--text)' }}>
-            💡 <strong>Solusi Cadangan Otomatis:</strong> Meskipun notifikasi sistem HP diblokir, aplikasi ini tetap memiliki <em>Pengingat Visual &amp; Suara di Dalam Aplikasi</em> saat jam kebiasaan tiba, jadi kamu tidak akan melewatkan jadwal!
-          </p>
-        </div>
-
-        <button onClick={onClose} className="btn-primary w-full justify-center py-2.5 font-bold">
-          Mengerti, Saya Akan Buka Blokir
-        </button>
       </div>
     </Modal>
   )

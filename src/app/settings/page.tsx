@@ -7,7 +7,7 @@ import type { AppDataExport, Theme } from '@/lib/types'
 import Modal, { ConfirmDialog } from '@/components/Modal'
 import { importAllData } from '@/lib/db'
 import { encodeDataForTransfer, getQRCodeUrl } from '@/lib/sync'
-import { getNotificationDiagnostic, NotificationDiagnostic } from '@/lib/notifications'
+import { getNotificationDiagnostic, NotificationDiagnostic, playReminderChime } from '@/lib/notifications'
 import UnblockNotifModal from '@/components/UnblockNotifModal'
 
 type SettingSection = 'sync' | 'notifications' | 'appearance' | 'data' | 'about'
@@ -595,7 +595,31 @@ export default function SettingsPage() {
                   disabled={testingNotif}
                   className="btn-secondary py-1.5 px-3.5 text-xs font-bold"
                 >
-                  {testingNotif ? 'Mengirim…' : '🧪 Tes Sekarang'}
+                  {testingNotif ? 'Mengirim…' : '🧪 Tes Notifikasi'}
+                </button>
+              </div>
+
+              {/* Direct In-App Sound & Vibration Test */}
+              <div className="flex items-center justify-between pt-2 border-t border-[var(--border-solid)]">
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                    🔊 Tes Alarm Suara &amp; Getar HP
+                  </p>
+                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    Uji coba nada dering pengingat &amp; getar (tidak butuh izin sistem Android)
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    playReminderChime()
+                    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                      navigator.vibrate([200, 100, 200, 100, 300])
+                    }
+                    setTestNotifMsg('🔊 Suara nada dering & getaran berhasil dibunyikan di HP kamu!')
+                  }}
+                  className="btn-primary py-1.5 px-3.5 text-xs font-bold"
+                >
+                  🔊 Bunyikan Alarm
                 </button>
               </div>
 
