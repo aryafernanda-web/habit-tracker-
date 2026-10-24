@@ -103,12 +103,20 @@ export default function UnblockNotifModal({ isOpen, onClose }: UnblockNotifModal
 
               {/* Step 3 */}
               <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/[0.03] border border-white/5">
-                <span className="w-5 h-5 rounded-full bg-indigo-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0 mt-0.5">3</span>
+                <span className="w-5 h-5 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0 mt-0.5">3</span>
                 <div>
-                  <p className="font-bold text-white text-xs">Reset Izin di Chrome (Ikon Sliders 🎛️)</p>
-                  <p className="text-[11px] mt-0.5 text-gray-300">
-                    Buka kembali web ini di Chrome Pixel 7a. Di bilah alamat atas sebelah kiri URL, ketuk ikon <strong>🎛️ (Sliders/Garis Pengaturan)</strong> &gt; ketuk <strong>Izin</strong> &gt; ubah Notifikasi menjadi <strong>Izinkan</strong> (atau ketuk <strong>Hapus data &amp; reset izin</strong>).
+                  <p className="font-bold text-emerald-400 text-xs">Buka Blokir di Setelan Situs Chrome (Pasti Berhasil)</p>
+                  <p className="text-[11px] mt-0.5 text-gray-300 leading-relaxed">
+                    Jika tombol izin di web tidak memunculkan popup apa pun:
                   </p>
+                  <ol className="list-decimal list-inside text-[11px] mt-1 space-y-1 text-gray-200">
+                    <li>Di Chrome Pixel 7a, ketuk <strong>menu titik tiga (⋮)</strong> di pojok kanan atas.</li>
+                    <li>Ketuk <strong>Setelan (Settings)</strong> &gt; scroll ke bawah &gt; pilih <strong>Setelan situs (Site settings)</strong>.</li>
+                    <li>Ketuk <strong>Notifikasi (Notifications)</strong>.</li>
+                    <li>Lihat daftar <strong>&quot;Diblokir&quot; (Blocked)</strong> di bagian bawah, ketuk nama web Habit Tracker kamu.</li>
+                    <li>Ubah Notifikasi menjadi <strong>&quot;Izinkan&quot; (Allow)</strong> atau tekan <strong>&quot;Hapus &amp; setel ulang&quot; (Clear &amp; reset)</strong>.</li>
+                    <li>Kembali ke halaman Habit Tracker lalu muat ulang (refresh) halaman!</li>
+                  </ol>
                 </div>
               </div>
 
