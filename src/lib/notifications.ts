@@ -93,20 +93,21 @@ export async function getSWReg(): Promise<ServiceWorkerRegistration | null> {
   if (_cachedReg && _cachedReg.active) return _cachedReg
 
   try {
-    // 1. Check if controller already has a registration
-    if (navigator.serviceWorker.controller) {
-      const reg = await navigator.serviceWorker.getRegistration()
-      if (reg) {
-        _cachedReg = reg
-        return reg
-      }
+    // 1. First priority: navigator.serviceWorker.ready is the gold standard on Android Chrome
+    const ready = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<null>((r) => setTimeout(() => r(null), 1500)),
+    ])
+    if (ready) {
+      _cachedReg = ready
+      return ready
     }
 
-    // 2. Try generic getRegistration (no relative url argument)
-    const reg = await navigator.serviceWorker.getRegistration()
-    if (reg) {
-      _cachedReg = reg
-      return reg
+    // 2. Check if active registration already exists
+    const existing = await navigator.serviceWorker.getRegistration()
+    if (existing) {
+      _cachedReg = existing
+      return existing
     }
 
     // 3. Register explicitly if not found
@@ -114,16 +115,6 @@ export async function getSWReg(): Promise<ServiceWorkerRegistration | null> {
     if (newReg) {
       _cachedReg = newReg
       return newReg
-    }
-
-    // 4. Fallback: wait for navigator.serviceWorker.ready with a safe 3s timeout
-    const ready = await Promise.race([
-      navigator.serviceWorker.ready,
-      new Promise<null>((r) => setTimeout(() => r(null), 3000)),
-    ])
-    if (ready) {
-      _cachedReg = ready
-      return ready
     }
   } catch (e) {
     console.warn('[HabitNotif] SW registration error:', e)
@@ -152,10 +143,24 @@ export async function showNotification(
   // Play audio chime for audible feedback
   playReminderChime()
 
+  // Haptic feedback for Android
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    try {
+      navigator.vibrate([200, 100, 200, 100, 200])
+    } catch {
+      // ignore
+    }
+  }
+
+  // Resolve absolute URLs for Android notification drawer
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const resolvedIcon = icon.startsWith('http') ? icon : (origin ? `${origin}${icon}` : icon)
+  const resolvedBadge = BADGE.startsWith('http') ? BADGE : (origin ? `${origin}${BADGE}` : BADGE)
+
   const options = {
     body,
-    icon,
-    badge: BADGE,
+    icon: resolvedIcon,
+    badge: resolvedBadge,
     tag: `habit-${Date.now()}`,
     renotify: true,
     requireInteraction: false,
@@ -164,7 +169,7 @@ export async function showNotification(
     data: { url: '/' },
   } as NotificationOptions
 
-  // ── Strategy A: Service Worker showNotification (Mandatory on Android Chrome)
+  // ── Strategy A: Service Worker showNotification (Mandatory on Android Chrome & Pixel)
   if ('serviceWorker' in navigator) {
     try {
       const reg = await getSWReg()

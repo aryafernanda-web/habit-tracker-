@@ -44,10 +44,17 @@ export default function InAppReminderBanner() {
     return null
   }, [habits, todayLogs, dismissedHabitIds, nowMinute])
 
-  // Play a soft reminder chime when a new due habit appears
+  // Play a soft reminder chime and vibrate when a new due habit appears
   useEffect(() => {
     if (dueHabit) {
       playReminderChime()
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        try {
+          navigator.vibrate([200, 100, 200, 100, 300])
+        } catch {
+          // ignore
+        }
+      }
     }
   }, [dueHabit])
 

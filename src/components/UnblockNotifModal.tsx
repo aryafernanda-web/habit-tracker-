@@ -9,10 +9,10 @@ interface UnblockNotifModalProps {
   onClose: () => void
 }
 
-type GuideTab = 'reset' | 'xiaomi' | 'samsung' | 'oppo' | 'fallback'
+type GuideTab = 'pixel' | 'reset' | 'xiaomi' | 'samsung' | 'oppo' | 'fallback'
 
 export default function UnblockNotifModal({ isOpen, onClose }: UnblockNotifModalProps) {
-  const [activeTab, setActiveTab] = useState<GuideTab>('reset')
+  const [activeTab, setActiveTab] = useState<GuideTab>('pixel')
   const [soundTested, setSoundTested] = useState(false)
 
   const handleTestSound = () => {
@@ -36,7 +36,7 @@ export default function UnblockNotifModal({ isOpen, onClose }: UnblockNotifModal
           <div>
             <p className="font-bold text-sm text-red-500">Kenapa Tertulis &quot;Tetap Terblokir&quot;?</p>
             <p className="text-[11px] mt-0.5 text-red-400">
-              Di HP Android, jika notifikasi pernah tertekan &quot;Blokir&quot; atau dinonaktifkan di sistem HP, tombol izin di browser akan terkunci. Pilih panduan di bawah sesuai merek HP kamu:
+              Di Android 13/14/15 (Google Pixel &amp; lainnya), jika notifikasi pernah tertekan &quot;Blokir&quot; atau dinonaktifkan di sistem HP, tombol izin di browser akan terkunci. Ikuti panduan di bawah:
             </p>
           </div>
         </div>
@@ -44,6 +44,7 @@ export default function UnblockNotifModal({ isOpen, onClose }: UnblockNotifModal
         {/* Brand tabs */}
         <div className="tab-bar overflow-x-auto py-1">
           {[
+            { id: 'pixel',   label: '🔥 Google Pixel 7a / Pixel',     icon: '📱' },
             { id: 'reset',   label: '⚡ Cara Paling Ampuh (Reset Izin)', icon: '🔄' },
             { id: 'xiaomi',  label: 'Xiaomi / Redmi / POCO',          icon: '📱' },
             { id: 'samsung', label: 'Samsung Galaxy',                  icon: '📱' },
@@ -60,6 +61,61 @@ export default function UnblockNotifModal({ isOpen, onClose }: UnblockNotifModal
             </button>
           ))}
         </div>
+
+        {/* ── Tab: Google Pixel 7a / Pixel (Stock Android 13/14/15) ── */}
+        {activeTab === 'pixel' && (
+          <div className="glass-card p-4 rounded-2xl flex flex-col gap-3 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🤖</span>
+              <p className="font-bold text-sm text-indigo-400">
+                Panduan Khusus Google Pixel 7a (Android 13 / 14 / 15)
+              </p>
+            </div>
+            <p className="text-xs">
+              Pada Google Pixel, Android memiliki sistem keamanan <strong>POST_NOTIFICATIONS</strong> ketat. Lakukan 3 langkah mudah ini:
+            </p>
+
+            <div className="flex flex-col gap-3">
+              {/* Step 1 */}
+              <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/[0.03] border border-white/5">
+                <span className="w-5 h-5 rounded-full bg-indigo-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0 mt-0.5">1</span>
+                <div>
+                  <p className="font-bold text-white text-xs">Tekan &amp; Tahan Ikon Chrome / Habit Tracker di Layar HP</p>
+                  <p className="text-[11px] mt-0.5 text-gray-300">
+                    Di home screen Pixel 7a kamu, <strong>tekan &amp; tahan (long press)</strong> ikon Chrome (atau ikon aplikasi Habit Tracker) &gt; ketuk tombol <strong>(i) Info aplikasi</strong>.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/[0.03] border border-white/5">
+                <span className="w-5 h-5 rounded-full bg-indigo-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0 mt-0.5">2</span>
+                <div>
+                  <p className="font-bold text-white text-xs">Nyalakan Saklar Notifikasi &amp; Situs</p>
+                  <p className="text-[11px] mt-0.5 text-gray-300">
+                    Ketuk menu <strong>Notifikasi (Notifications)</strong>. Pastikan saklar paling atas <strong>&quot;Semua notifikasi&quot;</strong> AKTIF. Lalu scroll ke bawah ke bagian <strong>Situs (Sites)</strong>, pastikan web Habit Tracker dalam posisi <strong>ON / Diizinkan</strong>.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/[0.03] border border-white/5">
+                <span className="w-5 h-5 rounded-full bg-indigo-500 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0 mt-0.5">3</span>
+                <div>
+                  <p className="font-bold text-white text-xs">Reset Izin di Chrome (Ikon Sliders 🎛️)</p>
+                  <p className="text-[11px] mt-0.5 text-gray-300">
+                    Buka kembali web ini di Chrome Pixel 7a. Di bilah alamat atas sebelah kiri URL, ketuk ikon <strong>🎛️ (Sliders/Garis Pengaturan)</strong> &gt; ketuk <strong>Izin</strong> &gt; ubah Notifikasi menjadi <strong>Izinkan</strong> (atau ketuk <strong>Hapus data &amp; reset izin</strong>).
+                  </p>
+                </div>
+              </div>
+
+              {/* Tip: Battery unrestricted */}
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px]">
+                <strong className="text-emerald-400">💡 Tips Penting Pixel 7a:</strong> Di menu Info aplikasi tadi &gt; ketuk <strong>Penggunaan baterai aplikasi</strong> &gt; pilih <strong>&quot;Tidak dibatasi&quot; (Unrestricted)</strong> agar sistem Pixel tidak mematikan pengingat saat layar HP terkunci / tidur.
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Tab: Reset Izin Chrome (Most Effective) ── */}
         {activeTab === 'reset' && (

@@ -5,7 +5,7 @@ self.addEventListener('message', (event) => {
 
   if (event.data.type === 'SHOW_NOTIFICATION') {
     const { title, options } = event.data
-    self.registration.showNotification(title, {
+    const promise = self.registration.showNotification(title, {
       body: options?.body || '',
       icon: options?.icon || '/icons/icon-192x192.png',
       badge: options?.badge || '/icons/icon-96x96.png',
@@ -14,6 +14,10 @@ self.addEventListener('message', (event) => {
       vibrate: [200, 100, 200, 100, 200],
       data: options?.data || { url: '/' },
     })
+
+    if (event.waitUntil) {
+      event.waitUntil(promise)
+    }
   }
 
   if (event.data.type === 'SCHEDULE_REMINDERS') {
